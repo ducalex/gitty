@@ -1,0 +1,273 @@
+{
+    "name": "gitty",
+    "displayName": "Git History",
+    "description": "Supports multiple git repo per workspace. View git history/diff/branching. Quickly view current file history.",
+    "version": "1.0.0",
+    "publisher": "ducalex",
+    "author": {
+        "name": "Alex Duchesne",
+        "email": "alex@netvps.ca"
+    },
+    "engines": {
+        "vscode": "^1.21.0"
+    },
+    "license": "MIT",
+    "repository": {},
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "*"
+    ],
+    "main": "./out/src/extension",
+    "scripts": {
+        "vscode:prepublish": "tsc -p ./",
+        "compile": "tsc -watch --sourceMap -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install"
+    },
+    "contributes": {
+        "configuration": {
+            "type": "object",
+            "properties": {
+                "gitty.history.commitsCount": {
+                    "type": "number",
+                    "default": 200,
+                    "description": "Commits to load per page"
+                },
+                "gitty.history.statMode": {
+                    "type": "string",
+                    "default": "short",
+                    "enum": [
+                        "none",
+                        "short",
+                        "full"
+                    ],
+                    "description": "Git stat mode. none is the fastest, short will display 'N files changes, N insertions, N deletions', full will display a list of modified files for each commit."
+                },
+                "gitty.history.graph": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show branch graph in the log"
+                },
+                "gitty.explorer.treeView": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Hierarchical folder display."
+                },
+                "gitty.explorer.showCurrentFileHistory": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically load and display the editor's current file history. (The data is cached and shouldn't significantly affect performance)."
+                }
+            }
+        },
+        "views": {
+            "explorer": [
+                {
+                    "id": "explorerCommitViewer",
+                    "name": "Gitty",
+                    "when": "gitty.projectHasGitRepo"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "gitty.viewRefHistory",
+                "title": "View Branch/Tag/Commit History",
+                "category": "gitty"
+            },
+            {
+                "command": "gitty.viewHistory",
+                "title": "View History",
+                "category": "gitty",
+                "icon": {
+                    "light": "res/light/git-compare.svg",
+                    "dark": "res/dark/git-compare.svg"
+                }
+            },
+            {
+                "command": "gitty.compareRefs",
+                "title": "Compare Branches/Tags/Commits",
+                "category": "gitty"
+            },
+            {
+                "command": "gitty.viewFileHistory",
+                "title": "Gitty: View File History"
+            },
+            {
+                "command": "gitty.viewLineHistory",
+                "title": "Gitty: View Line History"
+            },
+            {
+                "command": "gitty.viewFolderHistory",
+                "title": "Gitty: View Folder History"
+            },
+            {
+                "command": "gitty.diffLocalFile",
+                "title": "Gitty: View File Diff"
+            },
+            {
+                "command": "gitty.diffFolder",
+                "title": "Gitty: View Folder Diff"
+            },
+            {
+                "command": "gitty.clear",
+                "title": "Clear",
+                "icon": {
+                    "light": "res/light/clear.svg",
+                    "dark": "res/dark/clear.svg"
+                }
+            },
+            {
+                "command": "gitty.explorerShowTreeView",
+                "title": "Switch to folder View",
+                "icon": {
+                    "light": "res/light/folder.svg",
+                    "dark": "res/dark/folder.svg"
+                }
+            },
+            {
+                "command": "gitty.explorerShowListView",
+                "title": "Switch to list View",
+                "icon": {
+                    "light": "res/light/list-unordered.svg",
+                    "dark": "res/dark/list-unordered.svg"
+                }
+            },
+            {
+                "command": "gitty.explorerRefresh",
+                "title": "Refresh",
+                "icon": {
+                    "light": "res/light/refresh.svg",
+                    "dark": "res/dark/refresh.svg"
+                }
+            }
+        ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "when": "gitty.projectHasGitRepo",
+                    "command": "gitty.viewHistory"
+                },
+                {
+                    "when": "gitty.projectHasGitRepo",
+                    "command": "gitty.viewRefHistory"
+                },
+                {
+                    "when": "gitty.projectHasGitRepo",
+                    "command": "gitty.compareRefs"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.clear"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.viewFileHistory"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.viewLineHistory"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.viewFolderHistory"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.diffLocalFile"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.diffFolder"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.explorerShowTreeView"
+                },
+                {
+                    "when": "false",
+                    "command": "gitty.explorerShowListView"
+                }
+            ],
+            "view/title": [
+                {
+                    "command": "gitty.explorerShowTreeView",
+                    "when": "view == explorerCommitViewer && !config.gitty.explorer.treeView && gitty.isExploringCommit",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "gitty.explorerShowListView",
+                    "when": "view == explorerCommitViewer && config.gitty.explorer.treeView && gitty.isExploringCommit",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "gitty.explorerRefresh",
+                    "when": "view == explorerCommitViewer",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "gitty.clear",
+                    "when": "view == explorerCommitViewer && gitty.isExploringCommit",
+                    "group": "navigation@4"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "gitty.viewFileHistory",
+                    "when": "view == explorerCommitViewer && viewItem != folder"
+                },
+                {
+                    "command": "gitty.viewFolderHistory",
+                    "when": "view == explorerCommitViewer && viewItem == folder"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "gitty.viewFileHistory",
+                    "when": "!explorerResourceIsFolder",
+                    "group": "gitty@1"
+                },
+                {
+                    "command": "gitty.viewFolderHistory",
+                    "when": "explorerResourceIsFolder",
+                    "group": "gitty@1"
+                },
+                {
+                    "command": "gitty.diffLocalFile",
+                    "when": "!explorerResourceIsFolder",
+                    "group": "gitty@2"
+                },
+                {
+                    "command": "gitty.diffFolder",
+                    "when": "explorerResourceIsFolder",
+                    "group": "gitty@2"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "gitty.viewFileHistory",
+                    "when": "false",
+                    "group": "gitty@1"
+                },
+                {
+                    "command": "gitty.viewLineHistory",
+                    "when": "gitty.projectHasGitRepo",
+                    "group": "gitty@1"
+                }
+            ],
+            "editor/title": [
+                {
+                    "command": "gitty.viewHistory",
+                    "when": "gitty.projectHasGitRepo",
+                    "group": "navigation"
+                }
+            ]
+        }
+    },
+    "devDependencies": {
+        "@types/node": "^6.0.100",
+        "typescript": "^2.0.3",
+        "vscode": "^1.0.0"
+    }
+}
