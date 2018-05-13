@@ -213,8 +213,9 @@ export class GitRepository {
     async getLogEntries(statMode: GitStatMode, start: number, count: number, ref?: string,
         file?: Uri|string, line?: number, author?: string): Promise<GitLogEntry[]> {
 
-        let entrySeparator = randomString();
-        let args = ['log', `--format=${entrySeparator}%s%x1f%B%x1f%h%x1f%D%x1f%aN%x1f%ae%x1f%ct%x1f%cr%x1f`, '--decorate=full', '--simplify-merges'];
+        let separator = randomString();
+        let args = ['log', `--format=${separator}%s%x1f%B%x1f%h%x1f%D%x1f%aN%x1f%ae%x1f%ct%x1f%cr%x1f`, 
+                    '--decorate=full', '--simplify-merges'];
 
         if (line) {}
         else if (statMode === 'short') args.push('--shortstat');
@@ -234,7 +235,7 @@ export class GitRepository {
         }
 
         return (await this.exec(args))
-            .split(entrySeparator)
+            .split(separator)
             .map(e => this.parseCommit(e, line ? 'diff' : 'stat'))
             .filter(v => !!v);
     }
@@ -293,8 +294,11 @@ export class GitProvider {
     private knownRoots: string[] = [];
 
     constructor(readonly container) {
+        let fsWatcher = workspace.createFileSystemWatcher('**/.git/', false, true, false);
+
         this.container.putEnv('projectHasGitRepo', false);
         this.disposables.push(workspace.onDidChangeWorkspaceFolders(() => this.scanWorkspace()));
+        this.disposables.push(fsWatcher.onDidCreate(() => this.scanWorkspace()));
         this.scanWorkspace();
     }
 

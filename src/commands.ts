@@ -183,18 +183,18 @@ export class Commands {
 
     private async selectRef(repo: GitRepository, placeHolder = 'Select or type branch/hash/tag'): Promise<string> {
         let labels =  {[GitRefType.Head]: 'HEAD ', [GitRefType.Tag]: 'Tag at ', [GitRefType.RemoteHead]: 'Remote at '};
-        
-        let customPick = {description: 'Type a hash or tag or branch', label: 'Keyboard input'};
         let branches = (await repo.getRefs()).map(ref => ({label: ref.name || ref.commit, description: labels[ref.type] + ref.commit}));
-        let commits = (await repo.getLogEntries(null, 0, 500)).map(entry => ({label: entry.hash, description: entry.subject}));
+        let commitPick = {description: 'Open a list of commits', label: 'Pick a commit'};
         
-        let item = await window.showQuickPick([customPick, ...branches, ...commits], {placeHolder, matchOnDescription: true});
-        if (!item) return undefined;
-
-        if (item.label == 'Keyboard input') {
-            return await window.showInputBox({ placeHolder: 'Type a hash or tag or branch'});
-        } else {
-            return item.label;
+        let item = await window.showQuickPick([commitPick, ...branches], {placeHolder, matchOnDescription: true});
+        
+        if (item == commitPick) {
+            let commits = (await repo.getLogEntries(null, 0, 1000)).map(entry => ({label: entry.hash, description: entry.subject}));
+            item = await window.showQuickPick(commits, {placeHolder, matchOnDescription: true});
         }
+        
+        if (!item) return undefined;
+        
+        return item.label;
     }
 }

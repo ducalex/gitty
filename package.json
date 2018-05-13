@@ -1,5 +1,5 @@
 {
-    "name": "gitty",
+    "name": "Gitty",
     "displayName": "Git History",
     "description": "Supports multiple git repo per workspace. View git history/diff/branching. Quickly view current file history.",
     "version": "1.0.0",
@@ -74,12 +74,12 @@
             {
                 "command": "gitty.viewRefHistory",
                 "title": "View Branch/Tag/Commit History",
-                "category": "gitty"
+                "category": "Gitty"
             },
             {
                 "command": "gitty.viewHistory",
                 "title": "View History",
-                "category": "gitty",
+                "category": "Gitty",
                 "icon": {
                     "light": "res/light/git-compare.svg",
                     "dark": "res/dark/git-compare.svg"
@@ -88,7 +88,7 @@
             {
                 "command": "gitty.compareRefs",
                 "title": "Compare Branches/Tags/Commits",
-                "category": "gitty"
+                "category": "Gitty"
             },
             {
                 "command": "gitty.viewFileHistory",

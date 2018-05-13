@@ -130,6 +130,9 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
     };
 
     private async updateContent(printHeader: boolean = true, loadAll: boolean = !!this.context.line): Promise<void> {
+        this.decorate.loading.ranges = [new Range(this.lines.length, 0, this.lines.length, 1)];
+        this.setDecorations(window.activeTextEditor);
+
         let context = this.context;
         let statMode = this.container.configuration.statMode;
         let loadCount = loadAll ? 0 : this.container.configuration.commitsCount;
@@ -328,7 +331,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             for (let i = 0; i < prefix.length; i++) {
                 this.append(prefix[i] + '\n');
             }
-            
+
             this.append(repeat + '\n');
 
             /*
@@ -340,40 +343,42 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         }
 
         if (hasMore) {
-            this.append('\u00b7\u00b7\u00b7', this.decorate.more, false, {
+            let all, more;
+
+            more = {
                 onClick: (link) => {
-                    this.clickables.remove(link);
-                    this.decorate.more.ranges = [];
-                    this.lines.splice(link.range.start.line, 1, '-'.repeat(60), '', '');
+                    this.clickables.remove(more);
+                    this.clickables.remove(all);
+                    this.lines.splice(link.range.start.line, 1, '-'.repeat(60), ' ');
                     this.updateContent(false);
                 },
                 onHover: () => 'Load more commits'
-            });
-            
-            this.append(' / ');
+            };
 
-            this.append('Load all', this.decorate.more, false, {
+            all = {
                 onClick: (link) => {
-                    this.clickables.remove(link);
-                    this.decorate.more.ranges = [];
-                    this.lines.splice(link.range.start.line, 1, '-'.repeat(60), '', '');
+                    this.clickables.remove(more);
+                    this.clickables.remove(all);
+                    this.lines.splice(link.range.start.line, 1, '-'.repeat(60), ' ');
                     this.updateContent(false, true);
-                }
-            });
+                },
+                onHover: () => 'Load all remaining commits'
+            };
+            
+            this.append('\n');
+            this.append('\u00b7\u00b7\u00b7', this.decorate.more, false, more);
+            this.append(' / ');
+            this.append('Load all', this.decorate.more, false, all);
+            this.append('\n');
         }
         
+        this.decorate.loading.ranges = [];
         this._onDidChange.fire(this.documentUri);
         this.setDecorations(window.activeTextEditor);
     }
 
     private setDecorations(editor: TextEditor): void {
         this.decorate.clickable.ranges = this.clickables.ranges;
-
-        if (this.lines.join('').length === 0) {
-            this.decorate.loading.ranges = [new Range(0, 0, 0, 1)];
-        } else {
-            this.decorate.loading.ranges = [];
-        }
 
         for (let key in this.decorate) {
             editor.setDecorations(this.decorate[key].decorator, this.decorate[key].ranges);
