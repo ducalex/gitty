@@ -78,7 +78,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         }
     }
 
-    open(context: HistoryViewContext) {
+    public open(context: HistoryViewContext) {
         this.currentContext = context;
         if (context.repo && !context.branch) {
             context.repo.getCurrentBranch().then(branch => context.branch = branch);
@@ -90,7 +90,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             .then(() => this.setDecorations(window.activeTextEditor)));
     }
     
-    provideTextDocumentContent(uri: Uri): string {
+    public provideTextDocumentContent(uri: Uri): string {
         let content = this.lines.join('\n');
         if (content.length > 1) {
             return content;
@@ -99,7 +99,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         return ' ';
     }
 
-    dispose(): void {
+    public dispose(): void {
         this.disposables.forEach(d => d.dispose());
     }
 
@@ -414,7 +414,7 @@ export interface Clickable {
 
 class ClickableProvider implements HoverProvider {
     private clickables: Clickable[] = [];
-    get ranges() { return this.clickables.map(clickable => clickable.range) }
+    public get ranges() { return this.clickables.map(clickable => clickable.range) }
     
     constructor(private daddy: HistoryViewProvider) {
         languages.registerHoverProvider({scheme: EXTENSION_NAMESPACE}, this);
@@ -426,23 +426,23 @@ class ClickableProvider implements HoverProvider {
         });
     }
 
-    clear() {
+    public clear() {
         this.clickables = []; 
     }
 
-    add(link: Clickable) {
+    public add(link: Clickable) {
         this.clickables.push(link);
     }
 
-    remove(link: Clickable) {
+    public remove(link: Clickable) {
         this.clickables = this.clickables.filter(item => item != link)
     }
 
-    getClickableAt(position: Position) {
+    public getClickableAt(position: Position) {
         return this.clickables.find((e: Clickable) => e.range.contains(position));
     }
 
-    async provideHover(document: TextDocument, position: Position): Promise<Hover> {
+    public async provideHover(document: TextDocument, position: Position): Promise<Hover> {
         let link = this.getClickableAt(position);
         if (link && link.onHover) {
             return new Hover('````\r\n' + (await link.onHover()) + '\r\n````', link.range);

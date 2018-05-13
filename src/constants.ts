@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { ThemeColor, OverviewRulerLane, DecorationRenderOptions as Style } from 'vscode';
+import { ThemeColor, OverviewRulerLane, DecorationRenderOptions } from 'vscode';
 
 export const EXTENSION_ROOT = path.normalize(path.join(__dirname, '..', '..'));
 export const EXTENSION_NAMESPACE = 'gitty';

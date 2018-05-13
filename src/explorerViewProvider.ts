@@ -55,10 +55,10 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
     private rootFolder: CommittedTreeItem[] = [];
     private fileHistory: CommittedTreeFolder;
 
-    get context(): ExplorerViewContext {
+    public get context(): ExplorerViewContext {
         return this.currentContext || { repo: null };
     }
-    set context(context: ExplorerViewContext) {
+    public set context(context: ExplorerViewContext) {
         this.currentContext = context;
         this.buildCommitViewer();
     }
@@ -77,22 +77,22 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
         container.commands.register('_rememberCollapsed', folder => folder.collapsibleState = folder.collapsibleState == 1 ? 2 : 1);
     }
 
-    dispose(): void {
+    public dispose(): void {
         this.disposables.forEach(d => d.dispose());
     }
 
-    refresh() {
+    public refresh() {
         this.fileHistory = new CommittedTreeFolder(null, 'No current file history', null, Icons.History);
 
         this.buildFileHistoryTree();
         this.buildCommitViewer();
     }
 
-    getTreeItem(element: CommittedTreeItem): CommittedTreeItem {
+    public getTreeItem(element: CommittedTreeItem): CommittedTreeItem {
         return element;
     }
 
-    getChildren(element?: CommittedTreeItem): CommittedTreeItem[] {
+    public getChildren(element?: CommittedTreeItem): CommittedTreeItem[] {
         return element ? element.getChildren() : this.rootFolder;
     }
 
@@ -128,7 +128,7 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
         this._onDidChangeTreeData.fire();
     }
 
-    async buildFileHistoryTree(file?: Uri) {
+    private async buildFileHistoryTree(file?: Uri) {
         this.fileHistory.files = [];
 
         if (!file && window.activeTextEditor && window.activeTextEditor.document) {

@@ -32,27 +32,27 @@ export class Commands {
         });
     }
 
-    register(id: string, callback: (...args) => any, thisArg: any = this) {
+    public register(id: string, callback: (...args) => any, thisArg: any = this) {
         if (thisArg) {
             callback = callback.bind(this);
         }
         this.disposables.push(commands.registerCommand(EXTENSION_NAMESPACE + '.' + id, callback));
     }
 
-    dispose(): void {
+    public dispose(): void {
         this.disposables.forEach(d => d.dispose());
     }
 
-    async clear(): Promise<void> {
+    public async clear(): Promise<void> {
         this.container.setExplorerContext({ leftRef: null, rightRef: null, specifiedPath: null, repo: null });
     }
 
-    async explorerRefresh(): Promise<void> {
+    public async explorerRefresh(): Promise<void> {
         this.container.git.scanWorkspace();
         this.container.explorerView.refresh();
     }
 
-    async viewFileHistory(specifiedPath: Uri|GitCommittedFile): Promise<void> {
+    public async viewFileHistory(specifiedPath: Uri|GitCommittedFile): Promise<void> {
         if (!(specifiedPath instanceof Uri)) {
             specifiedPath = specifiedPath.uri;
         }
@@ -63,7 +63,7 @@ export class Commands {
         this.container.openHistoryView({ specifiedPath, repo });
     }
 
-    async viewLineHistory(): Promise<void> {
+    public async viewLineHistory(): Promise<void> {
         let editor = window.activeTextEditor;
         if (!editor) return;
 
@@ -74,7 +74,7 @@ export class Commands {
         this.container.openHistoryView({ specifiedPath: editor.document.uri, line, repo });
     }
 
-    async viewHistory(context?: HistoryViewContext): Promise<void> {
+    public async viewHistory(context?: HistoryViewContext): Promise<void> {
         if (context && context.repo) {
             this.container.openHistoryView(context);
         } else {
@@ -89,7 +89,7 @@ export class Commands {
         }
     }
 
-    async viewAuthorHistory(): Promise<void> {
+    public async viewAuthorHistory(): Promise<void> {
         let repo = await this.selectGitRepo(this.container.historyView.context);
         if (!repo) return;
 
@@ -102,7 +102,7 @@ export class Commands {
         this.container.openHistoryView({...this.container.historyView.context, author: item.description});
     }
 
-    async viewRefHistory(context?: HistoryViewContext): Promise<void> {
+    public async viewRefHistory(context?: HistoryViewContext): Promise<void> {
         let repo = await this.selectGitRepo(context);
         if (!repo) return;
 
@@ -113,7 +113,7 @@ export class Commands {
         this.container.setExplorerContext({ repo, rightRef: ref });
     }
 
-    async compareRefs(): Promise<void> {
+    public async compareRefs(): Promise<void> {
         let repo = await this.selectGitRepo();
         if (!repo) return;
 
@@ -127,7 +127,7 @@ export class Commands {
         this.container.setExplorerContext({ repo, leftRef, rightRef });
     }
 
-    async openCommittedFileDiff({uri, leftRef, rightRef}: GitCommittedFile): Promise<void> {
+    public async openCommittedFileDiff({uri, leftRef, rightRef}: GitCommittedFile): Promise<void> {
         let title = (leftRef ? `${leftRef} .. ${rightRef || '(uncommitted)'}` : rightRef) + ' | ' + path.basename(uri.path);
         let leftFile = toGitUri(uri, leftRef || rightRef + '~');
         let rightFile = rightRef ? toGitUri(uri, rightRef) : uri;
@@ -135,7 +135,7 @@ export class Commands {
         commands.executeCommand('vscode.diff', leftFile, rightFile, title, { preview: true });
     }
 
-    async diffLocalFile(specifiedPath: Uri|GitCommittedFile): Promise<void> {
+    public async diffLocalFile(specifiedPath: Uri|GitCommittedFile): Promise<void> {
         if (!(specifiedPath instanceof Uri)) {
             specifiedPath = specifiedPath.uri;
         }
@@ -149,7 +149,7 @@ export class Commands {
         this.openCommittedFileDiff({uri: specifiedPath, leftRef, gitRelativePath: ''})
     }
     
-    async diffFolder(specifiedPath: Uri|GitCommittedFile): Promise<void> {
+    public async diffFolder(specifiedPath: Uri|GitCommittedFile): Promise<void> {
         if (!(specifiedPath instanceof Uri)) {
             specifiedPath = specifiedPath.uri;
         }

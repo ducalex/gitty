@@ -135,11 +135,11 @@ export class GitRepository {
         return path.relative(this.root, normalize(file)) || '.';
     }
 
-    async getCurrentBranch() {
+    public async getCurrentBranch() {
         return this.exec(['rev-parse', '--abbrev-ref', 'HEAD']);
     }
 
-    async getCommitsCount(file?: Uri, author?: string): Promise<number> {
+    public async getCommitsCount(file?: Uri, author?: string): Promise<number> {
         let args: string[] = ['rev-list', '--simplify-merges', '--count', 'HEAD'];
         
         if (author) args.push(`--author=${author}`);
@@ -148,7 +148,7 @@ export class GitRepository {
         return parseInt(await this.exec(args));
     }
 
-    async getCommittedFiles(leftRef: string, rightRef: string): Promise<GitCommittedFile[]> {
+    public async getCommittedFiles(leftRef: string, rightRef: string): Promise<GitCommittedFile[]> {
         let args = ['show', '--format=%h', '--name-status', rightRef];
         if (leftRef) {
             args = ['diff', '--name-status', `${leftRef}..${rightRef}`];
@@ -172,7 +172,7 @@ export class GitRepository {
         return files;
     }
 
-    async getFileHistory(file?: Uri, start: number = 0, limit: number = 50): Promise<GitLogEntry[]> {
+    public async getFileHistory(file?: Uri, start: number = 0, limit: number = 50): Promise<GitLogEntry[]> {
         let fsPath = normalize(file instanceof Uri ? file.fsPath: file);
 
         if (!this.cachedFileHistories[fsPath])  {
@@ -183,7 +183,7 @@ export class GitRepository {
         return Promise.resolve(this.cachedFileHistories[fsPath]);
     }
 
-    async getGraph(start: number, count: number, ref?: string, file?: Uri, line?: number, author?: string): Promise<any> {
+    public async getGraph(start: number, count: number, ref?: string, file?: Uri, line?: number, author?: string): Promise<any> {
 
         let args = ['log', '--format=%h%n%h%n%h%n%h', '--graph', '--simplify-merges'];
 
@@ -210,7 +210,7 @@ export class GitRepository {
         return nodes;
     }
 
-    async getLogEntries(statMode: GitStatMode, start: number, count: number, ref?: string,
+    public async getLogEntries(statMode: GitStatMode, start: number, count: number, ref?: string,
         file?: Uri|string, line?: number, author?: string): Promise<GitLogEntry[]> {
 
         let separator = randomString();
@@ -240,7 +240,7 @@ export class GitRepository {
             .filter(v => !!v);
     }
 
-    async getCommitDetails(ref: string): Promise<GitLogEntry> {
+    public async getCommitDetails(ref: string): Promise<GitLogEntry> {
         if (this.cachedCommitDetails[ref]) return this.cachedCommitDetails[ref];
 
         let args = ['show', '--format=%s%x1f%B%x1f%h%x1f%D%x1f%aN%x1f%ae%x1f%ct%x1f%cr%x1f', '--stat=60', ref];
@@ -250,7 +250,7 @@ export class GitRepository {
         return this.cachedCommitDetails[ref];
     }
 
-    async getRefs(): Promise<GitRef[]> {
+    public async getRefs(): Promise<GitRef[]> {
         if (this.cachedRefs) return this.cachedRefs;
 
         let result = await this.exec(['for-each-ref', '--format', '%(refname) %(objectname:short)']);
@@ -266,7 +266,7 @@ export class GitRepository {
         return refs;
     }
 
-    async getAuthors(): Promise<GitAuthor[]> {
+    public async getAuthors(): Promise<GitAuthor[]> {
         if (this.cachedAuthors) return this.cachedAuthors;
 
         let result = await this.exec(['shortlog', '-se', 'HEAD']);
@@ -293,7 +293,7 @@ export class GitProvider {
     private gitRepositories: HashMap<GitRepository> = {};
     private knownRoots: string[] = [];
 
-    constructor(readonly container) {
+    constructor(private container) {
         let fsWatcher = workspace.createFileSystemWatcher('**/.git/', false, true, false);
 
         this.container.putEnv('projectHasGitRepo', false);
@@ -302,11 +302,11 @@ export class GitProvider {
         this.scanWorkspace();
     }
 
-    dispose(): void {
+    public dispose(): void {
         this.disposables.forEach(d => d.dispose());
     }
 
-    async scanWorkspace() {
+    public async scanWorkspace() {
         let folders = (await workspace.findFiles('**/.git/', null)).map(uri => path.dirname(uri.fsPath));
         
         if (workspace.workspaceFolders) {
