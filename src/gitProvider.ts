@@ -111,7 +111,7 @@ export class GitRepository {
         this.cachedRefs = undefined;
     }
 
-    private parseCommit(content: string, infoType = 'info'): GitLogEntry {
+    private parseCommit(content: string, infoType: 'info'|'stat'|'diff' = 'info'): GitLogEntry {
         let [subject, body, hash, refstr, author, email, date, reldate, info] = content.split('\x1f');
 
         if (hash === undefined)

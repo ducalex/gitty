@@ -72,6 +72,7 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
             workspace.onDidSaveTextDocument(e => this.buildFileHistoryTree()),
             window.onDidChangeActiveTextEditor(e => e && this.buildFileHistoryTree(e.document.uri)),
             window.registerTreeDataProvider('explorerCommitViewer', this),
+            this.container.git.onDidChangeGitRepository(e => this.refresh()),
             this._onDidChangeTreeData
         );
         container.commands.register('_rememberCollapsed', folder => folder.collapsibleState = folder.collapsibleState == 1 ? 2 : 1);

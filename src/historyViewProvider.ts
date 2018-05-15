@@ -228,7 +228,8 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         }
 
         for (let entry of entries) {
-            let prefix = (graph[entry.hash] || ['●', ' ', ' ', ' ']).map(node => node.replace('*', '●').replace('|', '│') + ' ');
+            let prefix = (graph[entry.hash] || ['●', ' ', ' ', ' '])
+                            .map(node => node.replace('*', '●').replace('|', '│') + ' ');
             let repeat = prefix.pop();
 
             this.append(prefix.shift());
@@ -333,13 +334,6 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             }
 
             this.append(repeat + '\n');
-
-            /*
-            if (this.logCount != commitsCount) {
-                this.append('│ ');
-            }
-            this.append('\n');
-            */
         }
 
         if (hasMore) {
