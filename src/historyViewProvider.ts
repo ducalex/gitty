@@ -210,13 +210,15 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             if (statMode !== GitStatMode.Full) {
                 entry = await context.repo.getCommitDetails(entry.hash);
             }
-            return `Commit:    ${entry.hash}\n`
+            return '````\n'
+                 + `Commit:    ${entry.hash}\n`
                  + `Author:    ${entry.author} <${entry.email}>\n`
                  + `Date:      ${entry.date}\n`
                  + `---\n`
                  + `${entry.body}\n`
+                 + '````\n'
                  + `---\n`
-                 + `${entry.stat}`;
+                 + `${entry.stat} [I'm an inline-style link](https://www.google.com)`;
         }
         
 
@@ -236,9 +238,9 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             //this.append('● ');
 
             this.append(entry.subject, this.decorate.subject);
-            this.append('  ');
 
             if (entry.subject.trim() != entry.body.trim()) {
+                this.append('  ');
                 this.append('...', this.decorate.body, false, {
                     onHover: () => entry.body,
                 });    
@@ -439,7 +441,7 @@ class ClickableProvider implements HoverProvider {
     public async provideHover(document: TextDocument, position: Position): Promise<Hover> {
         let link = this.getClickableAt(position);
         if (link && link.onHover) {
-            return new Hover('````\r\n' + (await link.onHover()) + '\r\n````', link.range);
+            return new Hover(await link.onHover(), link.range);
         }
     }
 }

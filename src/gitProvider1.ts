@@ -45,6 +45,7 @@ export interface GitLogEntry {
     stat?: string;
     diff?: string;
     graph?: string;
+    files?: GitCommittedFile[];
 }
 
 export interface GitCommittedFile {
@@ -128,7 +129,26 @@ export class GitRepository {
         date = (new Date(parseInt(date) * 1000)).toDateString() + ` (${reldate})`;
         info = info.replace(/\s*\n\s*/g, '\n').trim();
 
-        return { subject, body, hash, refs, author, email, date, [infoType]: info };
+
+        let files = [];
+
+        if (infoType === 'stat' && info.trim() !== '') {
+            let match, regex = /^(.+)\s*\|\s*(\d+)\s*([-+]+)$/;
+            let result = info;
+
+            for (let line of result.split(LINES)) {
+                if (match = regex.exec(line)) {
+                    files.push({ 
+                        gitRelativePath: match[1],
+                        status: match[2], 
+                        uri: Uri.file(path.join(this.root, match[1])),
+                        rightRef: hash
+                    });
+                }
+            }
+        }
+        
+        return { subject, body, hash, refs, author, email, date, [infoType]: info, files };
     }
 
     public getRelativePath(file: Uri|string) {
