@@ -210,15 +210,15 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             if (statMode !== GitStatMode.Full) {
                 entry = await context.repo.getCommitDetails(entry.hash);
             }
-            return '````\n'
+            return '```\n'
                  + `Commit:    ${entry.hash}\n`
                  + `Author:    ${entry.author} <${entry.email}>\n`
                  + `Date:      ${entry.date}\n`
                  + `---\n`
                  + `${entry.body}\n`
-                 + '````\n'
+                 + '```\n'
                  + `---\n`
-                 + `${entry.stat} [I'm an inline-style link](https://www.google.com)`;
+                 + `${entry.stat}`;
         }
         
 
@@ -313,7 +313,8 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
                     }
                     this.append('\n');
                 }
-            } else if (entry.diff) {
+            }
+            else if (entry.diff) {
                 let diffStarted = false;
                 let map = {'-': this.decorate.oldLine, '+': this.decorate.newLine, '@': this.decorate.info};
                 for (let line of entry.diff.split('\n')) {
@@ -325,7 +326,8 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
                         this.append('\n');
                     }
                 }
-            } else {
+            }
+            else {
                 this.append((prefix.shift() || repeat) + '\n');
             }
 

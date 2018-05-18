@@ -54,6 +54,8 @@ export interface GitCommittedFile {
     status?: string;
     leftRef?: string;
     rightRef?: string;
+    changes?: number;
+    graph?: string;
 }
 
 
@@ -85,6 +87,7 @@ export class GitRepository {
     private cachedAuthors: GitAuthor[];
     private cachedRefs: GitRef[];
 
+
     constructor(readonly root: string) {
         root = normalize(root);
 
@@ -97,13 +100,16 @@ export class GitRepository {
         this.disposables = [logWatcher, refWatcher];
     }
     
+
     public dispose() {
         this.disposables.forEach(d => d.dispose());
     }
 
+
     public async exec(args: string[]): Promise<string> {
         return await exec(args, this.root);
     }
+
 
     public clearCache() {
         this.cachedCommitDetails = {};
@@ -112,7 +118,8 @@ export class GitRepository {
         this.cachedRefs = undefined;
     }
 
-    private parseCommit(content: string, infoType: 'info'|'stat'|'diff' = 'info'): GitLogEntry {
+
+    private parseCommit(content: string, infoType: 'info'|'stat'|'diff'|'files' = 'info'): GitLogEntry {
         let [subject, body, hash, refstr, author, email, date, reldate, info] = content.split('\x1f');
 
         if (hash === undefined)
@@ -132,32 +139,48 @@ export class GitRepository {
 
         let files = [];
 
-        if (infoType === 'stat' && info.trim() !== '') {
-            let match, regex = /^(.+)\s*\|\s*(\d+)\s*([-+]+)$/;
-            let result = info;
-
-            for (let line of result.split(LINES)) {
-                if (match = regex.exec(line)) {
-                    files.push({ 
-                        gitRelativePath: match[1],
-                        status: match[2], 
-                        uri: Uri.file(path.join(this.root, match[1])),
-                        rightRef: hash
-                    });
-                }
-            }
+        if (infoType === 'files') {
+            files = this.parseNameStatus(info, hash);
         }
         
         return { subject, body, hash, refs, author, email, date, [infoType]: info, files };
     }
 
+
+    private parseNameStatus(content: string, rightRef?: string, leftRef?: string): GitCommittedFile[] {
+        let match, regex1 = /^([MAD]).*\t([^\t]+)/, regex2 = /^([RC]).*\t.*\t([^\t]+)/;
+        let files = [];
+
+        for (let line of content.split(LINES)) {
+            if (match = regex1.exec(line) || regex2.exec(line)) {
+                files.push({ 
+                    gitRelativePath: match[2], 
+                    status: match[1], 
+                    uri: Uri.file(path.join(this.root, match[2])), 
+                    leftRef, rightRef
+                });
+            }
+        }
+
+        return files;
+    }
+
+
+    private parseStat(content: string, rightRef?: string, leftRef?: string): GitCommittedFile[] {
+        let files = [];
+        return files;
+    }
+
+
     public getRelativePath(file: Uri|string) {
         return path.relative(this.root, normalize(file)) || '.';
     }
 
+
     public async getCurrentBranch() {
         return this.exec(['rev-parse', '--abbrev-ref', 'HEAD']);
     }
+
 
     public async getCommitsCount(file?: Uri, author?: string): Promise<number> {
         let args: string[] = ['rev-list', '--simplify-merges', '--count', 'HEAD'];
@@ -168,29 +191,6 @@ export class GitRepository {
         return parseInt(await this.exec(args));
     }
 
-    public async getCommittedFiles(leftRef: string, rightRef: string): Promise<GitCommittedFile[]> {
-        let args = ['show', '--format=%h', '--name-status', rightRef];
-        if (leftRef) {
-            args = ['diff', '--name-status', `${leftRef}..${rightRef}`];
-        }
-
-        let match, regex1 = /^([MAD]).*\t([^\t]+)/, regex2 = /^([RC]).*\t.*\t([^\t]+)/;
-        let result = await this.exec(args)
-        let files = [];
-
-        for (let line of result.split(LINES)) {
-            if (match = regex1.exec(line) || regex2.exec(line)) {
-                files.push({ 
-                    gitRelativePath: match[2], 
-                    status: match[1], 
-                    uri: Uri.file(path.join(this.root, match[2])), 
-                    leftRef, rightRef 
-                });
-            }
-        }
-
-        return files;
-    }
 
     public async getFileHistory(file?: Uri, start: number = 0, limit: number = 50): Promise<GitLogEntry[]> {
         let fsPath = normalize(file instanceof Uri ? file.fsPath: file);
@@ -202,6 +202,7 @@ export class GitRepository {
         
         return Promise.resolve(this.cachedFileHistories[fsPath]);
     }
+
 
     public async getGraph(start: number, count: number, ref?: string, file?: Uri, line?: number, author?: string): Promise<any> {
 
@@ -229,6 +230,7 @@ export class GitRepository {
 
         return nodes;
     }
+
 
     public async getLogEntries(statMode: GitStatMode, start: number, count: number, ref?: string,
         file?: Uri|string, line?: number, author?: string): Promise<GitLogEntry[]> {
@@ -260,6 +262,7 @@ export class GitRepository {
             .filter(v => !!v);
     }
 
+
     public async getCommitDetails(ref: string): Promise<GitLogEntry> {
         if (this.cachedCommitDetails[ref]) return this.cachedCommitDetails[ref];
 
@@ -269,6 +272,17 @@ export class GitRepository {
         this.cachedCommitDetails[ref] = commit;
         return this.cachedCommitDetails[ref];
     }
+
+
+    public async getCommittedFiles(leftRef: string, rightRef: string): Promise<GitCommittedFile[]> {
+        let args = ['show', '--format=%h', '--name-status', rightRef];
+        if (leftRef) {
+            args = ['diff', '--name-status', `${leftRef}..${rightRef}`];
+        }
+
+        return this.parseNameStatus(await this.exec(args), rightRef, leftRef);
+    }
+
 
     public async getRefs(): Promise<GitRef[]> {
         if (this.cachedRefs) return this.cachedRefs;
@@ -286,6 +300,7 @@ export class GitRepository {
         return refs;
     }
 
+    
     public async getAuthors(): Promise<GitAuthor[]> {
         if (this.cachedAuthors) return this.cachedAuthors;
 
