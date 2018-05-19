@@ -29,6 +29,11 @@
         "configuration": {
             "type": "object",
             "properties": {
+                "gitty.history.dateFormat": {
+                    "type": "string",
+                    "default": "%a, %e %B %Y at %R (%N)",
+                    "description": "Format of dates in the log history. The format is strftime with the addition of %N to indicate relative time (eg: 2 days ago)."
+                },
                 "gitty.history.commitsCount": {
                     "type": "number",
                     "default": 200,
@@ -52,12 +57,22 @@
                 "gitty.explorer.treeView": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Hierarchical folder display."
+                    "description": "Hierarchical folder display in commit explorer."
                 },
-                "gitty.explorer.showCurrentFileHistory": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Automatically load and display the editor's current file history. (The data is cached and shouldn't significantly affect performance)."
+                "gitty.explorer.formats.fileHistoryLabel": {
+                    "type": "string",
+                    "default": "${hash} • ${subject}",
+                    "description": "Label format for current file history commit log in the explorer view. Available variables: ${subject}, ${body}, ${hash}, ${fullhash}, ${author}, ${email}, ${date}, ${date:strftime}"
+                },
+                "gitty.explorer.formats.fileHistoryTooltip": {
+                    "type": "string",
+                    "default": "${hash} • ${subject}\n${date:%c (%N)}",
+                    "description": "Label format for commits in the current file history (explorer view). Available variables: ${subject}, ${body}, ${hash}, ${fullhash}, ${author}, ${email}, ${date}, ${date:strftime}"
+                },
+                "gitty.explorer.formats.fileLabel": {
+                    "type": "string",
+                    "default": "${basename}  •  ${dirname}",
+                    "description": "Label format for files in explorer view. Available variables: ${path}, ${basename}, ${dirname}"
                 }
             }
         },
@@ -269,5 +284,6 @@
         "@types/node": "^6.0.100",
         "typescript": "^2.0.3",
         "vscode": "^1.0.0"
-    }
+    },
+    "dependencies": {}
 }

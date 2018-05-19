@@ -6,6 +6,7 @@ import {
 import { EXTENSION_NAMESPACE, Icons, Styles } from './constants';
 import { ExtensionInstance } from './extension';
 import { GitLogEntry, GitRepository, GitRefType, GitStatMode } from './gitProvider';
+import { toGitUri, strftime } from './utils';
 
 
 export interface HistoryViewContext {
@@ -135,6 +136,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
 
         let context = this.context;
         let statMode = this.container.configuration.statMode;
+        let dateFormat = this.container.configuration.dateFormat;
         let loadCount = loadAll ? 0 : this.container.configuration.commitsCount;
         let entries: GitLogEntry[] = await context.repo.getLogEntries(statMode, this.logCount, loadCount, 
             context.branch, context.specifiedPath, context.line, context.author);
@@ -206,19 +208,35 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             this.append('No History');
         }
         
-        let hover = async entry => {
-            if (statMode !== GitStatMode.Full) {
-                entry = await context.repo.getCommitDetails(entry.hash);
-            }
-            return '```\n'
+        let hover = async (entry: GitLogEntry) => {
+            let popup = '```\n'
                  + `Commit:    ${entry.hash}\n`
                  + `Author:    ${entry.author} <${entry.email}>\n`
                  + `Date:      ${entry.date}\n`
                  + `---\n`
-                 + `${entry.body}\n`
+                 + entry.body + '\n\n'
                  + '```\n'
-                 + `---\n`
-                 + `${entry.stat}`;
+                 + '---\n';
+
+            if (statMode == GitStatMode.Short) {
+                popup += '```\n' + entry.stat + '\n```\n';
+            }
+
+            let files = await context.repo.getCommittedFiles(null, entry.hash);
+
+            for (let file of files) {
+                popup += '* `' + file.status + '`';
+
+                if (file.gitPrevRelativePath) {
+                    popup += ' `' + file.gitPrevRelativePath + '` -> ';
+                }
+                
+                popup += '[`' + file.gitRelativePath + '`](' + toGitUri(file.uri, file.rightRef).toString() + ')\n';
+            }
+
+            popup += '````\n   ````\n';
+
+            return popup;
         }
         
 
@@ -287,19 +305,26 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             
             if (entry.date) {
                 this.append(', ');
-                this.append(entry.date, this.decorate.date);
+                this.append(strftime(entry.date, dateFormat), this.decorate.date);
             }
 
             this.append('\n');
 
             if (entry.stat) {
+                let match, regex = /^(.+?)(\s*)\|(.+)/;
+                
                 for (let line of entry.stat.split(/\n\s*/)) {
                     this.append(prefix.shift() || repeat);
                     //this.append('│ ');
 
-                    let [file, separator, changes] = line.split(/(\|\s*\d+)/);
-                    if (changes != undefined) {
-                        this.append(' ' + file + separator, this.decorate.info);
+                    if (match = regex.exec(line)) {
+                        let [, file, spacer, changes] = match;
+                        this.append(' ');
+                        this.append(file, this.decorate.info, false, {
+                            onClick: () => commands.executeCommand(EXTENSION_NAMESPACE + '.openCommittedFileDiff', {...context, })
+                        });
+                        this.append(spacer + '|');
+
                         let minus1 = changes.indexOf('-');
 
                         if (minus1 > 0) {

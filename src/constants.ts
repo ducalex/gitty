@@ -1,17 +1,16 @@
 import * as path from 'path';
 import { ThemeColor, OverviewRulerLane, DecorationRenderOptions } from 'vscode';
 
+export type HashMap<T> = {[key: string] : T};
+
 export const EXTENSION_ROOT = path.normalize(path.join(__dirname, '..', '..'));
 export const EXTENSION_NAMESPACE = 'gitty';
 
-export type HashMap<T> = {[key: string] : T};
-
-let getIconUris = (name: string) => ({
-    light: path.join(EXTENSION_ROOT, 'res', 'light', name + '.svg'),
-    dark: path.join(EXTENSION_ROOT, 'res', 'dark', name + '.svg'),
-});
-
 export module Icons {
+    let getIconUris = (name: string) => ({
+        light: path.join(EXTENSION_ROOT, 'res', 'light', name + '.svg'),
+        dark: path.join(EXTENSION_ROOT, 'res', 'dark', name + '.svg'),
+    });
     export const Modified = getIconUris('status-modified');
     export const Added = getIconUris('status-added');
     export const Deleted = getIconUris('status-deleted');
@@ -32,7 +31,8 @@ export module Styles {
     export const title = {light: { color: '#267f99' }, dark: { color: '#4EC9B0' }};
     export const branch = {light: { color: '#AF00DB' }, dark: { color: '#C586C0' }};
     export const subject = {light: { color: '#0000ff' }, dark: { color: '#569cd6' }};
-    export const body = {light: {color: 'black'}, dark: {color: 'white'}, fontWeight: 'bold', backgroundColor: new ThemeColor('editor.wordHighlightBackground')};
+    export const body = {light: {color: 'black'}, dark: {color: 'white'}, fontWeight: 'bold', 
+                            backgroundColor: new ThemeColor('editor.wordHighlightBackground')};
     export const hash = {light: { color: '#a31515' }, dark: { color: '#ce9178' }};
     export const ref = {light: { color: '#008000' }, dark: { backgroundColor: '#1c7801', color: '#dddddd' }};
     export const author = {light: { color: '#001080' }, dark: { color: '#9CDCFE' }};

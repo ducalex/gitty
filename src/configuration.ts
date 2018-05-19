@@ -5,10 +5,15 @@ import { GitStatMode } from './gitProvider';
 let workspaceConfig, keys = [];
 
 export class Configuration {
-    @setting('history.statMode', 'short') statMode: GitStatMode;
-    @setting('history.commitsCount', 200) commitsCount: number;
-    @setting('history.graph', true) branchGraph: boolean;
-    @setting('explorer.treeView', true) treeView: boolean;
+    @setting('history.statMode') statMode: GitStatMode;
+    @setting('history.commitsCount') commitsCount: number;
+    @setting('history.graph') branchGraph: boolean;
+    @setting('history.dateFormat') dateFormat: string;
+
+    @setting('explorer.treeView') treeView: boolean;
+    @setting('explorer.formats.fileHistoryLabel') fileHistoryLabel: string;
+    @setting('explorer.formats.fileHistoryTooltip') fileHistoryTooltip: string;
+    @setting('explorer.formats.fileLabel') fileLabel: string;
 
     private _onDidChange = new EventEmitter<string[]>();
     readonly onDidChange = this._onDidChange.event;
@@ -26,7 +31,7 @@ export class Configuration {
 }
 
 
-function setting(key?, defaultValue?, validate?) {
+function setting(key, defaultValue?, validate?) {
     return (target: any, property: string) => {
         Object.defineProperty(target, property, {
             get: () => workspaceConfig.get(key, defaultValue), 

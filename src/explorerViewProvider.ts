@@ -4,7 +4,7 @@ import { Disposable, Event, EventEmitter, TreeDataProvider, TreeItem, TreeItemCo
 import { EXTENSION_NAMESPACE, Icons } from './constants';
 import { ExtensionInstance } from './extension';
 import { GitCommittedFile, GitRepository } from './gitProvider';
-import { format } from './utils';
+import { format, strftime } from './utils';
 
 class CommittedTreeItem extends TreeItem implements GitCommittedFile {
     readonly uri: Uri;
@@ -36,8 +36,6 @@ class CommittedTreeFolder extends CommittedTreeItem {
     public getChildren = () => [...this.subFolders, ...this.files];
 }
 
-let label = (gitRelativePath) => `${path.basename(gitRelativePath)} \u00a0\u2022\u00a0 ${path.dirname(gitRelativePath)}`;
-
 export interface ExplorerViewContext {
     repo: GitRepository;
     leftRef?: string;
@@ -62,31 +60,35 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
         this.currentContext = context;
         this.buildCommitViewer();
     }
-
+    
     constructor(private container: ExtensionInstance) {
         this.refresh();
 
         this.disposables.push(
-            container.configuration.onDidChange(changes => changes.find(key => key.startsWith('explorer.')) && this.refresh()),
-            //container.git.onDidChangeGitRepositories(e => this.buildFileHistoryTree()),
+            container.configuration.onDidChange(changes => {
+                if (changes.find(key => key.startsWith('explorer.'))) this.refresh();
+            }),
+            container.git.onDidChangeGitRepository(repo => this.refresh()),
             workspace.onDidSaveTextDocument(e => this.buildFileHistoryTree()),
             window.onDidChangeActiveTextEditor(e => e && this.buildFileHistoryTree(e.document.uri)),
             window.registerTreeDataProvider('explorerCommitViewer', this),
-            this.container.git.onDidChangeGitRepository(e => this.refresh()),
             this._onDidChangeTreeData
         );
-        container.commands.register('_rememberCollapsed', folder => folder.collapsibleState = folder.collapsibleState == 1 ? 2 : 1);
+        
+        container.commands.register('_rememberCollapsed', folder => {
+            folder.collapsibleState = folder.collapsibleState == 1 ? 2 : 1
+        });
     }
 
     public dispose(): void {
         this.disposables.forEach(d => d.dispose());
     }
 
-    public refresh() {
+    public async refresh() {
         this.fileHistory = new CommittedTreeFolder(null, 'No current file history', null, Icons.History);
-
-        this.buildFileHistoryTree();
-        this.buildCommitViewer();
+        //this._onDidChangeTreeData.fire();
+        await this.buildFileHistoryTree();
+        await this.buildCommitViewer();
     }
 
     public getTreeItem(element: CommittedTreeItem): CommittedTreeItem {
@@ -141,30 +143,44 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
         let repository = await this.container.git.getRepository(file);
         let limit = 25;
         
+        let label = this.container.configuration.fileHistoryLabel;
+        let tooltip = this.container.configuration.fileHistoryTooltip;
+
         if (repository) {
             let entries = await repository.getFileHistory(file, 0, limit);
             let gitRelativePath = await repository.getRelativePath(file);
             let workingDiff = await repository.exec(['diff', '--shortstat', gitRelativePath]);
 
             if (workingDiff) {
-                let tooltip = workingDiff.replace('1 file changed, ', '') + '\n' + fs.statSync(file.fsPath).ctime.toLocaleString();
+                let tooltip = workingDiff.replace('1 file changed, ', '') 
+                            + '\n' + strftime(fs.statSync(file.fsPath).ctime, '%c (%N)');
                 let gitfile = {uri: file, leftRef: entries[0].hash, rightRef: undefined, gitRelativePath};
+
                 this.fileHistory.files.push(new CommittedTreeItem(gitfile, '(Uncommitted changes)', tooltip));
             }
 
             for (let i = 0; i < entries.length; i++) {
-                let commit = entries[i];
                 let previous = entries[i + 1] || {hash: undefined};
-                let gitfile = { uri: file, leftRef: previous.hash, rightRef: commit.hash, gitRelativePath };
-                let label = format('$hash \u2022 $subject', commit as any);
-                this.fileHistory.files.push(new CommittedTreeItem(gitfile, label, label + '\n' + commit.date));
+                let gitfile = { uri: file, leftRef: previous.hash, rightRef: entries[i].hash, gitRelativePath };
+                let date = entries[i].date;
+                
+                let placeholders = { ...entries[i], date: format => strftime(date, format) };
+
+                this.fileHistory.files.push(new CommittedTreeItem(gitfile, 
+                    format(label, <any>placeholders), format(tooltip, <any>placeholders)));
             }
             
             if (entries.length > limit) {
                 this.fileHistory.files.push(new CommittedTreeItem(null, 'Load more...'));
             }
 
-            this.fileHistory.label = label(gitRelativePath);
+            let placeholders = {
+                path: gitRelativePath,
+                basename: path.basename(gitRelativePath),
+                dirname: path.dirname(gitRelativePath),
+            };
+
+            this.fileHistory.label = format(this.container.configuration.fileLabel, placeholders);
         }
 
         if (this.fileHistory.files.length == 0) {
@@ -193,7 +209,15 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
                 parent.files.push(new CommittedTreeItem(file, segment));
             }
         } else {
-            rootFolder.files.push(...files.map(file => new CommittedTreeItem(file, label(file.gitRelativePath))));
+            rootFolder.files.push(...files.map(file => {
+                let placeholders = {
+                    path: file.gitRelativePath,
+                    basename: path.basename(file.gitRelativePath),
+                    dirname: path.dirname(file.gitRelativePath),
+                };
+    
+                return new CommittedTreeItem(file, format(this.container.configuration.fileLabel, placeholders));
+            }));
         }
     }
 }

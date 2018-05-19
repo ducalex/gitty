@@ -6,7 +6,6 @@ import { spawn } from 'child_process';
 import { HashMap } from './constants';
 import { randomString } from './utils';
 
-
 const LINES = /\s*\r?\n\s*/g;
 
 export enum GitStatMode {
@@ -51,11 +50,11 @@ export interface GitLogEntry {
 export interface GitCommittedFile {
     uri?: Uri;
     gitRelativePath: string;
+    localRelativePath?: string;
+    gitPrevRelativePath?: string;
     status?: string;
     leftRef?: string;
     rightRef?: string;
-    changes?: number;
-    graph?: string;
 }
 
 
@@ -120,12 +119,13 @@ export class GitRepository {
 
 
     private parseCommit(content: string, infoType: 'info'|'stat'|'diff'|'files' = 'info'): GitLogEntry {
-        let [subject, body, hash, refstr, author, email, date, reldate, info] = content.split('\x1f');
-
+        let [subject, body, hash, refstr, author, email, date, info] = content.split('\x1f');
+        let refs = [], files = [];
+        
         if (hash === undefined)
             return;
         
-        let refs = [], match, regex = /refs\/(head|remote|tag)s\/([^\s,]+)/;
+        let match, regex = /refs\/(head|remote|tag)s\/([^\s,]+)/;
 
         for (let ref of refstr.split(', ')) {
             if (match = regex.exec(ref)) {
@@ -133,41 +133,59 @@ export class GitRepository {
             }
         }
 
-        date = (new Date(parseInt(date) * 1000)).toDateString() + ` (${reldate})`;
         info = info.replace(/\s*\n\s*/g, '\n').trim();
 
-
-        let files = [];
-
         if (infoType === 'files') {
-            files = this.parseNameStatus(info, hash);
+            files = this.parseNameStatus(info, null, hash);
+        } else if (infoType === 'stat') {
+            files = this.parseStat(info, null, hash);
         }
         
         return { subject, body, hash, refs, author, email, date, [infoType]: info, files };
     }
 
 
-    private parseNameStatus(content: string, rightRef?: string, leftRef?: string): GitCommittedFile[] {
-        let match, regex1 = /^([MAD]).*\t([^\t]+)/, regex2 = /^([RC]).*\t.*\t([^\t]+)/;
-        let files = [];
+    private parseNameStatus(content: string, leftRef?: string, rightRef?: string): GitCommittedFile[] {
+        let match, regex1 = /^([MAD]).*\t([^\t]+)/, regex2 = /^([RC]).*\t(.*)\t([^\t]+)/;
+        let files = [], file = undefined;
 
         for (let line of content.split(LINES)) {
-            if (match = regex1.exec(line) || regex2.exec(line)) {
-                files.push({ 
-                    gitRelativePath: match[2], 
-                    status: match[1], 
-                    uri: Uri.file(path.join(this.root, match[2])), 
-                    leftRef, rightRef
-                });
+            if (match = regex1.exec(line)) {
+                file = {
+                    gitRelativePath: match[2],
+                    status: match[1],
+                }
+            } else if (match = regex2.exec(line)) {
+                file = {
+                    gitRelativePath: match[3],
+                    gitPrevRelativePath: match[2],
+                    status: match[1],
+                }
+            } else {
+                continue;
             }
+
+            files.push({ ...file, uri: Uri.file(path.join(this.root, file.gitRelativePath)), leftRef, rightRef});
         }
 
         return files;
     }
 
-
-    private parseStat(content: string, rightRef?: string, leftRef?: string): GitCommittedFile[] {
+    private parseStat(content: string, leftRef?: string, rightRef?: string): GitCommittedFile[] {
+        let match, regex1 = /^(.+?)\s+\|\s+(.+)$/;
         let files = [];
+
+        for (let line of content.split(LINES)) {
+            if (match = regex1.exec(line)) {
+                files.push({ 
+                    gitRelativePath: match[1],
+                    status: match[2],
+                    uri: Uri.file(path.join(this.root, match[1])),
+                    leftRef, rightRef
+                });
+            }
+        }
+
         return files;
     }
 
@@ -236,7 +254,7 @@ export class GitRepository {
         file?: Uri|string, line?: number, author?: string): Promise<GitLogEntry[]> {
 
         let separator = randomString();
-        let args = ['log', `--format=${separator}%s%x1f%B%x1f%h%x1f%D%x1f%aN%x1f%ae%x1f%ct%x1f%cr%x1f`, 
+        let args = ['log', `--format=${separator}%s%x1f%B%x1f%h%x1f%D%x1f%aN%x1f%ae%x1f%cD%x1f`, 
                     '--decorate=full', '--simplify-merges'];
 
         if (line) {}
@@ -266,8 +284,8 @@ export class GitRepository {
     public async getCommitDetails(ref: string): Promise<GitLogEntry> {
         if (this.cachedCommitDetails[ref]) return this.cachedCommitDetails[ref];
 
-        let args = ['show', '--format=%s%x1f%B%x1f%h%x1f%D%x1f%aN%x1f%ae%x1f%ct%x1f%cr%x1f', '--stat=60', ref];
-        let commit = this.parseCommit(await this.exec(args), 'stat');
+        let args = ['show', '--format=%s%x1f%B%x1f%h%x1f%D%x1f%aN%x1f%ae%x1f%cD%x1f', '--name-status', ref];
+        let commit = this.parseCommit(await this.exec(args), 'files');
 
         this.cachedCommitDetails[ref] = commit;
         return this.cachedCommitDetails[ref];
@@ -280,7 +298,7 @@ export class GitRepository {
             args = ['diff', '--name-status', `${leftRef}..${rightRef}`];
         }
 
-        return this.parseNameStatus(await this.exec(args), rightRef, leftRef);
+        return this.parseNameStatus(await this.exec(args), leftRef, rightRef);
     }
 
 
@@ -300,7 +318,7 @@ export class GitRepository {
         return refs;
     }
 
-    
+
     public async getAuthors(): Promise<GitAuthor[]> {
         if (this.cachedAuthors) return this.cachedAuthors;
 
@@ -337,31 +355,42 @@ export class GitProvider {
         this.scanWorkspace();
     }
 
+
     public dispose(): void {
         this.disposables.forEach(d => d.dispose());
     }
 
+
     public async scanWorkspace() {
-        let folders = (await workspace.findFiles('**/.git/', null)).map(uri => path.dirname(uri.fsPath));
+        let folders = (await workspace.findFiles('**/.git/index', null)).map(uri => path.dirname(path.dirname(uri.fsPath)));
         
         if (workspace.workspaceFolders) {
             folders.push(...workspace.workspaceFolders.map(folder => folder.uri.fsPath));
         }
-        
-        this.gitRepositories = {};
 
+        //this.container.putEnv('projectHasGitRepo', false);
+        this.gitRepositories = {};
+        
         for (let fsPath of folders) {
             await this.getRepository(fsPath, false);
         }
+        
+        if (this.knownRoots.length > 0) {
+            this._onDidChangeGitRepository.fire();
+        }
+
+        this.container.putEnv('projectHasGitRepo', this.knownRoots.length > 0);
     }
+
 
     public getRepositories() {
         return this.knownRoots.map(key => this.gitRepositories[key]);
     }
 
+
     public async getRepository(uri: Uri|string, useKnownRoots: boolean = true): Promise<GitRepository> {
         let fsPath = normalize(uri);
-
+        
         if (useKnownRoots) {
             for (let root of this.knownRoots) {
                 if (fsPath.startsWith(root)) {
@@ -382,14 +411,10 @@ export class GitProvider {
         if (!root) return undefined;
 
         let repo = new GitRepository(root);
-        
-        this.disposables.push(repo, repo.onDidChange(repo => this._onDidChangeGitRepository.fire(repo)));
-        this.gitRepositories[repo.root] = repo;
 
+        this.gitRepositories[repo.root] = repo;
         this.knownRoots = Object.keys(this.gitRepositories).sort((a, b) => b.length - a.length);
-        this.container.putEnv('projectHasGitRepo', this.knownRoots.length > 0);
-        
-        this._onDidChangeGitRepository.fire();
+        this.disposables.push(repo, repo.onDidChange(repo => this._onDidChangeGitRepository.fire(repo)));
 
         return repo;
     }
