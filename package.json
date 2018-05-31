@@ -37,7 +37,7 @@
                 "gitty.history.commitsCount": {
                     "type": "number",
                     "default": 200,
-                    "description": "Commits to load per page"
+                    "description": "Commits to load per page. Set to 0 to always load everything (Can be slow on large repositories)."
                 },
                 "gitty.history.statMode": {
                     "type": "string",
@@ -49,7 +49,7 @@
                     ],
                     "description": "Git stat mode. none is the fastest, short will display 'N files changes, N insertions, N deletions', full will display a list of modified files for each commit."
                 },
-                "gitty.history.graph": {
+                "gitty.history.branchGraph": {
                     "type": "boolean",
                     "default": true,
                     "description": "Show branch graph in the log"

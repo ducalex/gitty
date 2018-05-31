@@ -1,5 +1,5 @@
-import { Uri } from 'vscode';
-import { HashMap } from './constants';
+import { EventEmitter, Uri, commands, workspace } from 'vscode';
+import { EXTENSION_NAMESPACE, HashMap } from './constants';
 import * as moment from '../lib/moment';
 
 
@@ -17,11 +17,15 @@ export function toGitUri(uri: Uri, ref?: string): Uri {
     return uri.with({scheme: 'git', query: JSON.stringify({path: uri.fsPath, ref})});
 }
 
+export function putEnv(key, value) {
+    commands.executeCommand('setContext', EXTENSION_NAMESPACE + '.' + key, value);
+}
+
 export function format(format: string, placeholders: HashMap<string|number|Function>) {
     return format.replace(/\$\{(\w+)(?::(.+?))?\}/g, (match, placeholder, argument) => {
         let value = placeholders[placeholder];
         if (typeof value === 'undefined') {
-            return  placeholder;
+            return placeholder;
         }
         if (typeof value === 'function') {
             return value(argument);
@@ -43,23 +47,18 @@ export function strftime(date, format: string) {
 
     let mjs = moment(date);
 
-    if (!format) {
+    if (format == undefined) {
         return mjs.format();
     }
 
-    let momentFormat = format.split(/(%.)/).map(token => {
-        if (token === '%N') { //
+    let momentFormat = (format || '').split(/(%.)/).map(symbol => {
+        if (symbol === '%N') { //
             return '[' + mjs.fromNow() + ']';
-        } else if (token[0] === '%' && replacements[token[1]]) {
-            return replacements[token[1]];
+        } else if (symbol[0] === '%' && replacements[symbol[1]]) {
+            return replacements[symbol[1]];
         }
-        return token.length > 0 ? '[' + token + ']' : token;
+        return symbol ? '[' + symbol + ']' : symbol;
     }).join('');
 
     return mjs.format(momentFormat);
 }
-
-moment.relativeTimeThreshold('m', 50);
-moment.relativeTimeThreshold('h', 22);
-moment.relativeTimeThreshold('d', 28);
-moment.relativeTimeThreshold('M', 10);

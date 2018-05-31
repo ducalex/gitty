@@ -1,93 +1,66 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { Disposable, Event, EventEmitter, TreeDataProvider, TreeItem, TreeItemCollapsibleState, Uri, window, workspace } from 'vscode';
+import { Event, EventEmitter, TreeDataProvider, TreeItem, TreeItemCollapsibleState, Uri, window, workspace } from 'vscode';
+import { BaseViewProvider } from './baseViewProvider';
 import { EXTENSION_NAMESPACE, Icons } from './constants';
-import { ExtensionInstance } from './extension';
-import { GitCommittedFile, GitRepository } from './gitProvider';
-import { format, strftime } from './utils';
+import { GitCommittedFile } from './gitProvider';
+import { format, putEnv, strftime } from './utils';
+import * as path from 'path';
+import * as fs from 'fs';
 
-class CommittedTreeItem extends TreeItem implements GitCommittedFile {
-    readonly uri: Uri;
-    readonly status: string;
-    readonly gitRelativePath: string;
-    readonly leftRef: string;
-    readonly rightRef: string;
+export class ExplorerViewProvider extends BaseViewProvider implements TreeDataProvider<TreeItem> {
+    public readonly onDidChangeTreeData: Event<TreeItem> = this._onDidChange.event;
 
-    public command = {command: EXTENSION_NAMESPACE + '.openCommittedFileDiff', arguments: [this], title: ''};
-    public children: CommittedTreeItem[] = [];
-    public getChildren = () => this.children;
+    protected configuration: {
+        treeView: boolean;               // gitty.explorer.treeView
+        formats: {                       // gitty.explorer.formats
+            fileHistoryLabel: string,    // gitty.explorer.formats.fileHistoryLabel
+            fileHistoryTooltip: string,  // gitty.explorer.formats.fileHistoryTooltip
+            fileLabel: string            // gitty.explorer.formats.fileLabel
+        };
+    };
 
-    constructor(file: GitCommittedFile, public label?: string, public tooltip?, public iconPath?) {
-        super(label);
-        if (file) {
-            Object.assign(this, file);
-            if (file.status) this.iconPath = Icons.GitFileStatusMap[file.status[0].toUpperCase()];
-            //this.resourceUri = file.uri;
-        }
-    }
-}
-
-class CommittedTreeFolder extends CommittedTreeItem {
-    public command = {command: EXTENSION_NAMESPACE + '._rememberCollapsed', arguments: [this], title: ''};
-    public collapsibleState = TreeItemCollapsibleState.Expanded;
-    public contextValue = 'folder';
-    public subFolders: CommittedTreeFolder[] = [];
-    public files: CommittedTreeItem[] = [];
-    public getChildren = () => [...this.subFolders, ...this.files];
-}
-
-export interface ExplorerViewContext {
-    repo: GitRepository;
-    leftRef?: string;
-    rightRef?: string;
-    specifiedPath?: Uri;
-}
-
-export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem> {
-    private _onDidChangeTreeData: EventEmitter<CommittedTreeItem> = new EventEmitter<CommittedTreeItem>();
-    readonly onDidChangeTreeData: Event<CommittedTreeItem> = this._onDidChangeTreeData.event;
-
-    private currentContext: ExplorerViewContext;
-
-    private disposables: Disposable[] = [];
-    private rootFolder: CommittedTreeItem[] = [];
-    private fileHistory: CommittedTreeFolder;
-
-    public get context(): ExplorerViewContext {
-        return this.currentContext || { repo: null };
-    }
-    public set context(context: ExplorerViewContext) {
-        this.currentContext = context;
-        this.buildCommitViewer();
-    }
+    protected openCommits: CommittedTreeItem[] = [];
+    protected fileHistory: CommittedTreeFolder;
+    protected clearFileHistoryTimeout;
     
-    constructor(private container: ExtensionInstance) {
-        this.refresh();
-
+    constructor(container) {
+        super(container, EXTENSION_NAMESPACE + '.explorer');
         this.disposables.push(
-            container.configuration.onDidChange(changes => {
-                if (changes.find(key => key.startsWith('explorer.'))) this.refresh();
+            container.git.onDidChangeGitRepository(repo => {
+                this.refresh();
             }),
-            container.git.onDidChangeGitRepository(repo => this.refresh()),
-            workspace.onDidSaveTextDocument(e => this.buildFileHistoryTree()),
-            window.onDidChangeActiveTextEditor(e => e && this.buildFileHistoryTree(e.document.uri)),
+            workspace.onDidSaveTextDocument(e => {
+                this.buildFileHistory();
+            }),
+            window.onDidChangeActiveTextEditor(editor => {
+                clearTimeout(this.clearFileHistoryTimeout);
+                if (!editor) { // This is to reduce flicker when switching editors
+                    this.clearFileHistoryTimeout = setTimeout(() => this.buildFileHistory(), 300);
+                } else {
+                    this.buildFileHistory();
+                }
+            }),
             window.registerTreeDataProvider('explorerCommitViewer', this),
-            this._onDidChangeTreeData
         );
         
+        container.commands.register('explorerShowTreeView', () => this.configuration.treeView = true);
+        container.commands.register('explorerShowListView', () => this.configuration.treeView = false);
         container.commands.register('_rememberCollapsed', folder => {
             folder.collapsibleState = folder.collapsibleState == 1 ? 2 : 1
         });
+
+        this.fileHistory = new CommittedTreeFolder(null, 'No current file history', null, Icons.History);
     }
 
-    public dispose(): void {
-        this.disposables.forEach(d => d.dispose());
+    public onContextChanged(): void {
+        this.buildCommitViewer();
+    }
+
+    public onConfigurationChanged() {
+        this.refresh();
     }
 
     public async refresh() {
-        this.fileHistory = new CommittedTreeFolder(null, 'No current file history', null, Icons.History);
-        //this._onDidChangeTreeData.fire();
-        await this.buildFileHistoryTree();
+        await this.buildFileHistory();
         await this.buildCommitViewer();
     }
 
@@ -96,14 +69,17 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
     }
 
     public getChildren(element?: CommittedTreeItem): CommittedTreeItem[] {
-        return element ? element.getChildren() : this.rootFolder;
+        if (!element) {
+            return [this.fileHistory, ...this.openCommits];    
+        }
+        return element.getChildren();
     }
 
     private async buildCommitViewer(): Promise<void> {
-        this.rootFolder = [this.fileHistory];
-
-        if (this.context.repo) {
-            let { repo, leftRef, rightRef, specifiedPath } = this.context;
+        let { repo, leftRef, rightRef, specifiedPath } = this.context;
+        this.openCommits = [];
+        
+        if (repo) {
             let files = await repo.getCommittedFiles(leftRef, rightRef);
             let folder = new CommittedTreeFolder(null, `Commit ${rightRef}  (${files.length} files changed)`, null, Icons.RootFolder);
 
@@ -122,29 +98,35 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
             }
             
             this._buildFileTree(folder, files);
-            this.rootFolder.push(folder);
+            this.openCommits.push(folder);
             
             this.fileHistory.collapsibleState = TreeItemCollapsibleState.Collapsed;
         }
-
-        this.container.putEnv('isExploringCommit', !!this.context.repo);
-        this._onDidChangeTreeData.fire();
+        
+        putEnv('isExploringCommit', !!repo);
+        this._onDidChange.fire();
     }
 
-    private async buildFileHistoryTree(file?: Uri) {
+    private async buildFileHistory(file?: Uri) {
+        this.fileHistory.label = 'No current file history';
         this.fileHistory.files = [];
 
         if (!file && window.activeTextEditor && window.activeTextEditor.document) {
             file = window.activeTextEditor.document.uri;
         }
         
-        if (file) file = Uri.file(file.fsPath); // if scheme == git
+        if (!file) {
+            this._onDidChange.fire();
+            return;
+        }
+        
+        file = Uri.file(file.fsPath); // if scheme == git
+
+        let label = this.configuration.formats.fileHistoryLabel;
+        let tooltip = this.configuration.formats.fileHistoryTooltip;
 
         let repository = await this.container.git.getRepository(file);
         let limit = 25;
-        
-        let label = this.container.configuration.fileHistoryLabel;
-        let tooltip = this.container.configuration.fileHistoryTooltip;
 
         if (repository) {
             let entries = await repository.getFileHistory(file, 0, limit);
@@ -180,18 +162,15 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
                 dirname: path.dirname(gitRelativePath),
             };
 
-            this.fileHistory.label = format(this.container.configuration.fileLabel, placeholders);
+            if (this.fileHistory.files.length) {
+                this.fileHistory.label = format(this.configuration.formats.fileLabel, placeholders);
+            }
         }
 
-        if (this.fileHistory.files.length == 0) {
-            this.fileHistory.label = 'No current file history';
-        }
-
-        this.container.putEnv('hasGitRepo', !!repository);
-        this._onDidChangeTreeData.fire(this.fileHistory);
+        this._onDidChange.fire(this.fileHistory);
     }
 
-    private _buildFileTree(rootFolder: CommittedTreeFolder, files: GitCommittedFile[], showTreeView = this.container.configuration.treeView) {
+    private _buildFileTree(rootFolder: CommittedTreeFolder, files: GitCommittedFile[], showTreeView = this.configuration.treeView) {
         if (showTreeView) {
             for (let file of files) {
                 let gitRelativePath: string = '';
@@ -216,8 +195,39 @@ export class ExplorerViewProvider implements TreeDataProvider<CommittedTreeItem>
                     dirname: path.dirname(file.gitRelativePath),
                 };
     
-                return new CommittedTreeItem(file, format(this.container.configuration.fileLabel, placeholders));
+                return new CommittedTreeItem(file, format(this.configuration.formats.fileLabel, placeholders));
             }));
         }
     }
+}
+
+
+class CommittedTreeItem extends TreeItem implements GitCommittedFile {
+    readonly uri: Uri;
+    readonly status: string;
+    readonly gitRelativePath: string;
+    readonly leftRef: string;
+    readonly rightRef: string;
+
+    public command = {command: EXTENSION_NAMESPACE + '.openCommittedFileDiff', arguments: [this], title: ''};
+    public children: CommittedTreeItem[] = [];
+    public getChildren = () => this.children;
+
+    constructor(file: GitCommittedFile, public label?: string, public tooltip?, public iconPath?) {
+        super(label);
+        if (file) {
+            Object.assign(this, file);
+            if (file.status) this.iconPath = Icons.GitFileStatusMap[file.status[0].toUpperCase()];
+            //this.resourceUri = file.uri;
+        }
+    }
+}
+
+class CommittedTreeFolder extends CommittedTreeItem {
+    public command = {command: EXTENSION_NAMESPACE + '._rememberCollapsed', arguments: [this], title: ''};
+    public collapsibleState = TreeItemCollapsibleState.Expanded;
+    public contextValue = 'folder';
+    public subFolders: CommittedTreeFolder[] = [];
+    public files: CommittedTreeItem[] = [];
+    public getChildren = () => [...this.subFolders, ...this.files];
 }

@@ -18,6 +18,7 @@ export module Icons {
     export const Copied = getIconUris('status-copied');
     export const RootFolder = getIconUris('structure');
     export const Loading = getIconUris('loading');
+    export const HistoryLoading = getIconUris('history-loading');
     export const History = getIconUris('history');
 
     export const GitFileStatusMap = { M: Modified, A: Added, D: Deleted, R: Renamed, C: Copied };
@@ -47,7 +48,6 @@ export module Styles {
         overviewRulerColor: 'darkgreen',
         overviewRulerLane: OverviewRulerLane.Full
     };
-    
     export const loading = {
         light: { after: { contentIconPath: Icons.Loading.light } },
         dark: { after: { contentIconPath: Icons.Loading.dark } },

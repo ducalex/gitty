@@ -4,7 +4,8 @@ import * as fs from 'fs';
 import { Disposable, EventEmitter, Uri, workspace } from 'vscode';
 import { spawn } from 'child_process';
 import { HashMap } from './constants';
-import { randomString } from './utils';
+import { randomString, putEnv } from './utils';
+import { ExtensionInstance } from './extension';
 
 const LINES = /\s*\r?\n\s*/g;
 
@@ -85,10 +86,13 @@ export class GitRepository {
     private cachedFileHistories: HashMap<GitLogEntry[]> = {};
     private cachedAuthors: GitAuthor[];
     private cachedRefs: GitRef[];
-
-
-    constructor(readonly root: string) {
-        root = normalize(root);
+    
+    readonly root: string;
+    readonly name: string;
+    
+    constructor(root: string) {
+        this.root = normalize(root);
+        this.name = path.basename(this.root);
 
         let logWatcher = workspace.createFileSystemWatcher(path.join(root, '.git', 'logs'));
         let refWatcher = workspace.createFileSystemWatcher(path.join(root, '.git', 'packed-refs'));
@@ -222,21 +226,19 @@ export class GitRepository {
     }
 
 
-    public async getGraph(start: number, count: number, ref?: string, file?: Uri, line?: number, author?: string): Promise<any> {
+    public async getGraph(statMode: GitStatMode, start: number, count: number, ref?: string, 
+        file?: Uri, line?: number, author?: string): Promise<any> {
 
         let args = ['log', '--format=%h%n%h%n%h%n%h', '--graph', '--simplify-merges'];
+
+        if (statMode === GitStatMode.None) {
+            args[1] = '--format=%h%n%h%n%h';
+        }
 
         if (start)  args.push(`--skip=${start}`);
         if (count)  args.push(`--max-count=${count}`);
         if (author) args.push(`--author=${author}`)
         if (ref)    args.push(ref);
-        if (file) {
-            let filePath: string = await this.getRelativePath(file);
-            args.push('--follow', filePath);
-            if (line) {
-                args.push(`-L ${line},${line}:${filePath}`);
-            }
-        }
 
         let nodes: HashMap<string[]> = {};
 
@@ -346,10 +348,10 @@ export class GitProvider {
     private gitRepositories: HashMap<GitRepository> = {};
     private knownRoots: string[] = [];
 
-    constructor(private container) {
+    constructor(private container: ExtensionInstance) {
         let fsWatcher = workspace.createFileSystemWatcher('**/.git/', false, true, false);
 
-        this.container.putEnv('projectHasGitRepo', false);
+        putEnv('projectHasGitRepo', false);
         this.disposables.push(workspace.onDidChangeWorkspaceFolders(() => this.scanWorkspace()));
         this.disposables.push(fsWatcher.onDidCreate(() => this.scanWorkspace()));
         this.scanWorkspace();
@@ -379,7 +381,7 @@ export class GitProvider {
             this._onDidChangeGitRepository.fire();
         }
 
-        this.container.putEnv('projectHasGitRepo', this.knownRoots.length > 0);
+        putEnv('projectHasGitRepo', this.knownRoots.length > 0);
     }
 
 

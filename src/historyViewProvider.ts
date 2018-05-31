@@ -1,33 +1,25 @@
 import { 
-    DecorationRenderOptions, Disposable, EventEmitter, Hover, HoverProvider, OverviewRulerLane, 
-    Position, Range, StatusBarItem, TextDocument, TextDocumentContentProvider, TextEditor, 
-    TextEditorSelectionChangeKind, ThemeColor, Uri, commands, languages, window, workspace 
+    DecorationRenderOptions, EventEmitter, HoverProvider, Position, Range, TextDocument, workspace,
+    TextDocumentContentProvider, TextEditorSelectionChangeKind, Uri, commands, languages, window, Hover
 } from 'vscode';
-import { EXTENSION_NAMESPACE, Icons, Styles } from './constants';
-import { ExtensionInstance } from './extension';
-import { GitLogEntry, GitRepository, GitRefType, GitStatMode } from './gitProvider';
-import { toGitUri, strftime } from './utils';
+import { BaseViewProvider } from './baseViewProvider';
+import { EXTENSION_NAMESPACE, Styles } from './constants';
+import { GitLogEntry, GitRefType, GitStatMode } from './gitProvider';
+import { strftime, toGitUri } from './utils';
 
+export class HistoryViewProvider extends BaseViewProvider implements TextDocumentContentProvider {
+    protected readonly documentUri: Uri = Uri.parse(EXTENSION_NAMESPACE + '://authority/Git History');
+    
+    protected configuration: {
+        statMode: GitStatMode;  // gitty.history.statMode
+        commitsCount: number;   // gitty.history.commitsCount
+        branchGraph: boolean;   // gitty.history.branchGraph
+        dateFormat: string;     // gitty.history.dateFormat
+    };
 
-export interface HistoryViewContext {
-    repo: GitRepository;
-    branch?: string;
-    specifiedPath?: Uri;
-    line?: number;
-    author?: string;
-}
-
-export class HistoryViewProvider implements TextDocumentContentProvider {
-    readonly documentUri: Uri = Uri.parse(EXTENSION_NAMESPACE + '://authority/Git History');
-
-    private _onDidChange = new EventEmitter<Uri>();
-    readonly onDidChange = this._onDidChange.event;
-
-    private logCount: number = 0;
-    private lines: string[] = [''];
-    private disposables: Disposable[] = [];
-    private clickables = new ClickableProvider(this);
-    private currentContext: HistoryViewContext;
+    protected logCount: number = 0;
+    protected lines: string[] = [''];
+    protected clickables = new ClickableProvider(this);
 
     private decorate = new class Decorations {
         readonly info = new Decoration(Styles.info);
@@ -54,24 +46,12 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
                && window.activeTextEditor.document.uri.scheme === this.documentUri.scheme;
     }
 
-    get context(): HistoryViewContext {
-        return this.currentContext || { repo: null };
-    }
-
-    constructor(private container: ExtensionInstance) {
+    constructor(container) {
+        super(container, EXTENSION_NAMESPACE + '.history');
         this.disposables.push(
             this._onDidChange,
             workspace.registerTextDocumentContentProvider(this.documentUri.scheme, this),
-            window.onDidChangeActiveTextEditor(editor => {
-                if (editor && editor.document.uri.scheme === this.documentUri.scheme) {
-                    this.setDecorations(editor);
-                }
-            }),
-            container.configuration.onDidChange(changes => {
-                if (this.focused && changes.find(key => key.startsWith('history.'))) {
-                    commands.executeCommand(EXTENSION_NAMESPACE + '.viewHistory', this.context)
-                }
-            })
+            window.onDidChangeActiveTextEditor(editor => this.setDecorations()),
         );
 
         for (let key in this.decorate) {
@@ -79,16 +59,24 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         }
     }
 
-    public open(context: HistoryViewContext) {
-        this.currentContext = context;
-        if (context.repo && !context.branch) {
-            context.repo.getCurrentBranch().then(branch => context.branch = branch);
+    public onConfigurationChanged() {
+        if (this.focused) {
+            this.setContext(this.context);
+        }
+    }
+
+    public onContextChanged() {
+        if (!this.context.repo) {
+            return;
+        }
+        if (!this.context.branch) {
+            this.context.repo.getCurrentBranch().then(branch => this.context.branch = branch);
         }
         this.clear();
         this._onDidChange.fire(this.documentUri);
         workspace.openTextDocument(this.documentUri)
             .then(doc => window.showTextDocument(doc, { preview: false, preserveFocus: true })
-            .then(() => this.setDecorations(window.activeTextEditor)));
+            .then(() => this.setDecorations()));
     }
     
     public provideTextDocumentContent(uri: Uri): string {
@@ -98,10 +86,6 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         }
         this.updateContent();
         return ' ';
-    }
-
-    public dispose(): void {
-        this.disposables.forEach(d => d.dispose());
     }
 
     private append(text: string, decoration?: any, skipWhitespaces?: boolean, clickable?: Clickable): Range {
@@ -132,18 +116,18 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
 
     private async updateContent(printHeader: boolean = true, loadAll: boolean = !!this.context.line): Promise<void> {
         this.decorate.loading.ranges = [new Range(this.lines.length, 0, this.lines.length, 1)];
-        this.setDecorations(window.activeTextEditor);
-
+        this.setDecorations();
+        
         let context = this.context;
-        let statMode = this.container.configuration.statMode;
-        let dateFormat = this.container.configuration.dateFormat;
-        let loadCount = loadAll ? 0 : this.container.configuration.commitsCount;
+        let statMode = this.configuration.statMode;
+        let dateFormat = this.configuration.dateFormat;
+        let loadCount = loadAll ? 0 : this.configuration.commitsCount;
         let entries: GitLogEntry[] = await context.repo.getLogEntries(statMode, this.logCount, loadCount, 
             context.branch, context.specifiedPath, context.line, context.author);
 
         let commitsCount: number = entries.length;
         let hasMore: boolean = false;
-        let branchGraph = this.container.configuration.branchGraph;
+        let branchGraph = this.configuration.branchGraph;
 
         if (loadCount !== 0 && entries.length >= loadCount) {
             commitsCount = await context.repo.getCommitsCount(context.specifiedPath, context.author);
@@ -151,13 +135,14 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         }
 
         if (printHeader) {
+            let repoSwitcher = this.container.git.getRepositories().length === 1 ? undefined :  
+                                            {onClick: () => this.container.commands.viewHistory()};
+
             this.clear();
             this.append('Git History', this.decorate.title);
 
             this.append(' (');
-            this.append(this.context.repo.root, this.decorate.info, false, {
-                onClick: () => this.container.commands.viewHistory(),
-            });
+            this.append(this.context.repo.root, this.decorate.info, false, repoSwitcher);
             this.append(')\n');
 
             if (context.specifiedPath) {
@@ -188,14 +173,17 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
             
             this.append('Graph: ', this.decorate.info);
             this.append(branchGraph ? 'enabled' : 'disabled', this.decorate.info, false, {
-                onClick: () => this.container.configuration.branchGraph = !branchGraph,
+                onClick: () => this.configuration.branchGraph = !branchGraph,
                 onHover: () => 'Graph is a work in progress, it may break or be slow'
             });
             this.append('  ');
 
             this.append('Stat: ', this.decorate.info);
             this.append(statMode, this.decorate.info, false, {
-                onClick: () => commands.executeCommand(EXTENSION_NAMESPACE + '.historyToggleStatMode'),
+                onClick: () => {
+                    let map = {none: GitStatMode.Short, short: GitStatMode.Full, full: GitStatMode.None};
+                    this.configuration.statMode = map[this.configuration.statMode] || GitStatMode.Short;
+                },
                 onHover: () => 'Stat changes the level of details displayed. None is the fastest.'
             });
             this.append('  ');
@@ -243,7 +231,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         let graph = {};
 
         if (!context.specifiedPath && branchGraph) {
-            graph = await context.repo.getGraph(this.logCount, loadCount, context.branch, 
+            graph = await context.repo.getGraph(statMode, this.logCount, loadCount, context.branch, 
                     context.specifiedPath, context.line, context.author);
         }
 
@@ -271,7 +259,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
 
             this.append(entry.hash, this.decorate.hash, false, {
                 onClick: () => {
-                    this.container.setExplorerContext({
+                    this.container.explorerView.setContext({
                         repo: context.repo,
                         rightRef: entry.hash,
                         specifiedPath: context.specifiedPath,
@@ -287,7 +275,7 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
                 this.append(iconmap[ref.type] + ref.name, this.decorate.ref, true, {
                     onClick: () => {
                         commands.executeCommand(EXTENSION_NAMESPACE + '.viewHistory', {...context, branch: ref.name});
-                        this.container.setExplorerContext({repo: context.repo, rightRef: ref.name })
+                        this.container.explorerView.setContext({repo: context.repo, rightRef: ref.name });
                     }
                 });
             }
@@ -352,9 +340,6 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
                     }
                 }
             }
-            else {
-                this.append((prefix.shift() || repeat) + '\n');
-            }
 
             this.logCount++;
         
@@ -397,14 +382,18 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         
         this.decorate.loading.ranges = [];
         this._onDidChange.fire(this.documentUri);
-        this.setDecorations(window.activeTextEditor);
+        this.setDecorations();
     }
 
-    private setDecorations(editor: TextEditor): void {
+    private setDecorations(): void {
+        if (!this.focused) {
+            return;
+        }
+
         this.decorate.clickable.ranges = this.clickables.ranges;
 
         for (let key in this.decorate) {
-            editor.setDecorations(this.decorate[key].decorator, this.decorate[key].ranges);
+            window.activeTextEditor.setDecorations(this.decorate[key].decorator, this.decorate[key].ranges);
         }
     }
 
@@ -418,7 +407,6 @@ export class HistoryViewProvider implements TextDocumentContentProvider {
         }
     }
 }
-
 
 
 class Decoration {

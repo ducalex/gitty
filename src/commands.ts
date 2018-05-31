@@ -1,9 +1,9 @@
 import * as path from 'path';
-import { Disposable, QuickPickItem, Uri, commands, window } from 'vscode';
-import { EXTENSION_NAMESPACE, HashMap } from './constants';
+import { Disposable, Uri, commands, window } from 'vscode';
+import { ViewContext } from './baseViewProvider';
+import { EXTENSION_NAMESPACE } from './constants';
 import { ExtensionInstance } from './extension';
-import { GitCommittedFile, GitRefType, GitRepository, GitStatMode } from './gitProvider';
-import { HistoryViewContext } from './historyViewProvider';
+import { GitCommittedFile, GitRefType, GitRepository } from './gitProvider';
 import { toGitUri } from './utils';
 
 export class Commands {
@@ -22,14 +22,6 @@ export class Commands {
         this.register('openCommittedFileDiff', this.openCommittedFileDiff);
         this.register('diffLocalFile', this.diffLocalFile);
         this.register('diffFolder', this.diffFolder);
-
-        // Configuration toggles
-        this.register('explorerShowTreeView', () => container.configuration.treeView = true);
-        this.register('explorerShowListView', () => container.configuration.treeView = false);
-        this.register('historyToggleStatMode', () => {
-            let map = {none: GitStatMode.Short, short: GitStatMode.Full, full: GitStatMode.None};
-            container.configuration.statMode = map[container.configuration.statMode] || GitStatMode.Short;
-        });
     }
 
     public register(id: string, callback: (...args) => any, thisArg: any = this) {
@@ -44,7 +36,7 @@ export class Commands {
     }
 
     public async clear(): Promise<void> {
-        this.container.setExplorerContext({ leftRef: null, rightRef: null, specifiedPath: null, repo: null });
+        this.container.explorerView.setContext({ leftRef: null, rightRef: null, specifiedPath: null, repo: null });
     }
 
     public async explorerRefresh(): Promise<void> {
@@ -60,7 +52,7 @@ export class Commands {
         let repo = await this.container.git.getRepository(specifiedPath);
         if (!repo) return;
 
-        this.container.openHistoryView({ specifiedPath, repo });
+        this.container.historyView.setContext({ specifiedPath, repo });
     }
 
     public async viewLineHistory(): Promise<void> {
@@ -71,12 +63,12 @@ export class Commands {
         if (!repo) return;
 
         let line = window.activeTextEditor.selection.active.line + 1;
-        this.container.openHistoryView({ specifiedPath: editor.document.uri, line, repo });
+        this.container.historyView.setContext({ specifiedPath: editor.document.uri, line, repo });
     }
 
-    public async viewHistory(context?: HistoryViewContext): Promise<void> {
+    public async viewHistory(context?: ViewContext): Promise<void> {
         if (context && context.repo) {
-            this.container.openHistoryView(context);
+            this.container.historyView.setContext(context);
         } else {
             let repo: GitRepository;
             if (window.activeTextEditor && window.activeTextEditor.document) {
@@ -85,7 +77,7 @@ export class Commands {
             if (!repo) repo = await this.selectGitRepo();
             if (!repo) return;
 
-            this.container.openHistoryView({ repo });
+            this.container.historyView.setContext({ repo });
         }
     }
 
@@ -99,18 +91,18 @@ export class Commands {
         let item = await window.showQuickPick(pickItems, { placeHolder: 'Select an author to see their commits' });
         if (!item) return;
         
-        this.container.openHistoryView({...this.container.historyView.context, author: item.description});
+        this.container.historyView.setContext({...this.container.historyView.context, author: item.description});
     }
 
-    public async viewRefHistory(context?: HistoryViewContext): Promise<void> {
+    public async viewRefHistory(context?: ViewContext): Promise<void> {
         let repo = await this.selectGitRepo(context);
         if (!repo) return;
 
         let ref = await this.selectRef(repo);
         if (!ref) return;
 
-        this.container.openHistoryView({ branch: ref, specifiedPath: null, repo });
-        this.container.setExplorerContext({ repo, rightRef: ref });
+        this.container.historyView.setContext({ branch: ref, specifiedPath: null, repo });
+        this.container.explorerView.setContext({ repo, rightRef: ref });
     }
 
     public async compareRefs(): Promise<void> {
@@ -123,8 +115,8 @@ export class Commands {
         let rightRef = await this.selectRef(repo, 'Select a ref to compare against ' + leftRef);
         if (!rightRef) return;
 
-        this.container.openHistoryView({ repo, branch: leftRef + '..' + rightRef });
-        this.container.setExplorerContext({ repo, leftRef, rightRef });
+        this.container.historyView.setContext({ repo, branch: leftRef + '..' + rightRef });
+        this.container.explorerView.setContext({ repo, leftRef, rightRef });
     }
 
     public async openCommittedFileDiff({uri, leftRef, rightRef}: GitCommittedFile): Promise<void> {
@@ -162,10 +154,10 @@ export class Commands {
         
         let rightRef = await repo.getCurrentBranch();
         
-        this.container.setExplorerContext({ repo, specifiedPath, leftRef, rightRef });
+        this.container.explorerView.setContext({ repo, specifiedPath, leftRef, rightRef });
     }
     
-    private async selectGitRepo(context?: HistoryViewContext): Promise<GitRepository> {
+    private async selectGitRepo(context?: ViewContext): Promise<GitRepository> {
         if (context && context.repo) {
             return Promise.resolve(context.repo);
         }
