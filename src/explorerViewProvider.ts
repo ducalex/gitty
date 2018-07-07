@@ -6,9 +6,7 @@ import { format, putEnv, strftime } from './utils';
 import * as path from 'path';
 import * as fs from 'fs';
 
-export class ExplorerViewProvider extends BaseViewProvider implements TreeDataProvider<TreeItem> {
-    public readonly onDidChangeTreeData: Event<TreeItem> = this._onDidChange.event;
-
+export class ExplorerViewProvider extends BaseViewProvider  {
     protected configuration: {
         treeView: boolean;               // gitty.explorer.treeView
         formats: {                       // gitty.explorer.formats
@@ -18,15 +16,19 @@ export class ExplorerViewProvider extends BaseViewProvider implements TreeDataPr
         };
     };
 
-    protected openCommits: CommittedTreeItem[] = [];
-    protected fileHistory: CommittedTreeFolder;
+    protected fileHistory: CommittedTreeItem;
     protected clearFileHistoryTimeout;
+    
+    protected openResults: any[] = [];
+
+    protected fileHistoryTree = new TreeProvider();
+    protected resultsTree = new TreeProvider();
     
     constructor(container) {
         super(container, EXTENSION_NAMESPACE + '.explorer');
         this.disposables.push(
             container.git.onDidChangeGitRepository(repo => {
-                this.refresh();
+                this.refreshFileHistory();
             }),
             workspace.onDidSaveTextDocument(e => {
                 this.buildFileHistory();
@@ -39,45 +41,45 @@ export class ExplorerViewProvider extends BaseViewProvider implements TreeDataPr
                     this.buildFileHistory();
                 }
             }),
-            window.registerTreeDataProvider('explorerCommitViewer', this),
+            window.registerTreeDataProvider('explorerFileHistoryViewer', this.fileHistoryTree),
+            window.registerTreeDataProvider('explorerResultsViewer', this.resultsTree),
         );
         
         container.commands.register('explorerShowTreeView', () => this.configuration.treeView = true);
         container.commands.register('explorerShowListView', () => this.configuration.treeView = false);
-        container.commands.register('_rememberCollapsed', folder => {
-            folder.collapsibleState = folder.collapsibleState == 1 ? 2 : 1
-        });
 
-        this.fileHistory = new CommittedTreeFolder(null, 'No current file history', null, Icons.History);
-    }
-
-    public onContextChanged(): void {
-        this.buildCommitViewer();
+        this.fileHistory = new CommittedTreeItem(null, 'No current file history');
     }
 
     public onConfigurationChanged() {
-        this.refresh();
+        this.refreshResults();
     }
 
-    public async refresh() {
+    public async refreshFileHistory() {
         await this.buildFileHistory();
-        await this.buildCommitViewer();
     }
 
-    public getTreeItem(element: CommittedTreeItem): CommittedTreeItem {
-        return element;
-    }
-
-    public getChildren(element?: CommittedTreeItem): CommittedTreeItem[] {
-        if (!element) {
-            return [this.fileHistory, ...this.openCommits];    
+    public async refreshResults() {
+        let results = this.openResults, i = 0;
+        for (let context of results) {
+            await this.openResult(context, i++ == 0);
         }
-        return element.getChildren();
     }
 
-    private async buildCommitViewer(): Promise<void> {
-        let { repo, leftRef, rightRef, specifiedPath } = this.context;
-        this.openCommits = [];
+    public async clearResults() {
+        this.openResults = [];
+        this.resultsTree.items = [];
+        this.resultsTree.refresh();
+        putEnv('hasResults', false);
+    }
+
+    public async openResult(context, single = true) {
+        if (single) {
+            this.openResults = [];
+            this.resultsTree.items = [];
+        }
+        
+        let { repo, leftRef, rightRef, specifiedPath } = context;
         
         if (repo) {
             let files = await repo.getCommittedFiles(leftRef, rightRef);
@@ -98,18 +100,18 @@ export class ExplorerViewProvider extends BaseViewProvider implements TreeDataPr
             }
             
             this._buildFileTree(folder, files);
-            this.openCommits.push(folder);
-            
-            this.fileHistory.collapsibleState = TreeItemCollapsibleState.Collapsed;
+            this.resultsTree.items.push(folder);
+            this.openResults.push(context);
         }
         
-        putEnv('isExploringCommit', !!repo);
-        this._onDidChange.fire();
+        this.resultsTree.refresh();
+        putEnv('hasResults', this.resultsTree.items.length > 0);
     }
 
     private async buildFileHistory(file?: Uri) {
         this.fileHistory.label = 'No current file history';
-        this.fileHistory.files = [];
+        this.fileHistory.iconPath = null;
+        this.fileHistoryTree.items = [this.fileHistory];
 
         if (!file && window.activeTextEditor && window.activeTextEditor.document) {
             file = window.activeTextEditor.document.uri;
@@ -138,7 +140,7 @@ export class ExplorerViewProvider extends BaseViewProvider implements TreeDataPr
                             + '\n' + strftime(fs.statSync(file.fsPath).ctime, '%c (%N)');
                 let gitfile = {uri: file, leftRef: entries[0].hash, rightRef: undefined, gitRelativePath};
 
-                this.fileHistory.files.push(new CommittedTreeItem(gitfile, '(Uncommitted changes)', tooltip));
+                this.fileHistoryTree.items.push(new CommittedTreeItem(gitfile, '(Uncommitted changes)', tooltip));
             }
 
             for (let i = 0; i < entries.length; i++) {
@@ -148,12 +150,12 @@ export class ExplorerViewProvider extends BaseViewProvider implements TreeDataPr
                 
                 let placeholders = { ...entries[i], date: format => strftime(date, format) };
 
-                this.fileHistory.files.push(new CommittedTreeItem(gitfile, 
+                this.fileHistoryTree.items.push(new CommittedTreeItem(gitfile, 
                     format(label, <any>placeholders), format(tooltip, <any>placeholders)));
             }
             
             if (entries.length > limit) {
-                this.fileHistory.files.push(new CommittedTreeItem(null, 'Load more...'));
+                this.fileHistoryTree.items.push(new CommittedTreeItem(null, 'Load more...'));
             }
 
             let placeholders = {
@@ -162,12 +164,13 @@ export class ExplorerViewProvider extends BaseViewProvider implements TreeDataPr
                 dirname: path.dirname(gitRelativePath),
             };
 
-            if (this.fileHistory.files.length) {
+            if (this.fileHistoryTree.items.length) {
                 this.fileHistory.label = format(this.configuration.formats.fileLabel, placeholders);
+                this.fileHistory.iconPath = Icons.History;
             }
         }
-
-        this._onDidChange.fire(this.fileHistory);
+        
+        this.fileHistoryTree.refresh();
     }
 
     private _buildFileTree(rootFolder: CommittedTreeFolder, files: GitCommittedFile[], showTreeView = this.configuration.treeView) {
@@ -224,10 +227,31 @@ class CommittedTreeItem extends TreeItem implements GitCommittedFile {
 }
 
 class CommittedTreeFolder extends CommittedTreeItem {
-    public command = {command: EXTENSION_NAMESPACE + '._rememberCollapsed', arguments: [this], title: ''};
     public collapsibleState = TreeItemCollapsibleState.Expanded;
     public contextValue = 'folder';
     public subFolders: CommittedTreeFolder[] = [];
     public files: CommittedTreeItem[] = [];
     public getChildren = () => [...this.subFolders, ...this.files];
+}
+
+class TreeProvider implements TreeDataProvider<TreeItem> {
+    protected readonly _onDidChange = new EventEmitter<any>();
+    public readonly onDidChangeTreeData: Event<TreeItem> = this._onDidChange.event;
+
+    public items: CommittedTreeItem[] = [];
+
+    public refresh() {
+        this._onDidChange.fire();
+    }
+
+    public getTreeItem(element: CommittedTreeItem): CommittedTreeItem {
+        return element;
+    }
+
+    public getChildren(element?: CommittedTreeItem): CommittedTreeItem[] {
+        if (!element) {
+            return this.items;
+        }
+        return element.getChildren();
+    }
 }

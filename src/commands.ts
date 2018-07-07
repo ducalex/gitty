@@ -11,7 +11,7 @@ export class Commands {
 
     constructor(readonly container: ExtensionInstance) {
         this.register('clear', this.clear),
-        this.register('explorerRefresh', this.explorerRefresh),
+        this.register('explorerFileHistoryRefresh', this.explorerFileHistoryRefresh),
         this.register('viewFolderHistory', this.viewFileHistory);
         this.register('viewFileHistory', this.viewFileHistory);
         this.register('viewLineHistory', this.viewLineHistory);
@@ -36,12 +36,12 @@ export class Commands {
     }
 
     public async clear(): Promise<void> {
-        this.container.explorerView.setContext({ leftRef: null, rightRef: null, specifiedPath: null, repo: null });
+        this.container.explorerView.clearResults();
     }
 
-    public async explorerRefresh(): Promise<void> {
+    public async explorerFileHistoryRefresh(): Promise<void> {
         this.container.git.scanWorkspace();
-        this.container.explorerView.refresh();
+        this.container.explorerView.refreshFileHistory();
     }
 
     public async viewFileHistory(specifiedPath: Uri|GitCommittedFile): Promise<void> {
@@ -102,7 +102,7 @@ export class Commands {
         if (!ref) return;
 
         this.container.historyView.setContext({ branch: ref, specifiedPath: null, repo });
-        this.container.explorerView.setContext({ repo, rightRef: ref });
+        this.container.explorerView.openResult({ repo, rightRef: ref });
     }
 
     public async compareRefs(): Promise<void> {
@@ -116,7 +116,7 @@ export class Commands {
         if (!rightRef) return;
 
         this.container.historyView.setContext({ repo, branch: leftRef + '..' + rightRef });
-        this.container.explorerView.setContext({ repo, leftRef, rightRef });
+        this.container.explorerView.openResult({ repo, leftRef, rightRef });
     }
 
     public async openCommittedFileDiff({uri, leftRef, rightRef}: GitCommittedFile): Promise<void> {
@@ -154,7 +154,7 @@ export class Commands {
         
         let rightRef = await repo.getCurrentBranch();
         
-        this.container.explorerView.setContext({ repo, specifiedPath, leftRef, rightRef });
+        this.container.explorerView.openResult({ repo, specifiedPath, leftRef, rightRef });
     }
     
     private async selectGitRepo(context?: ViewContext): Promise<GitRepository> {

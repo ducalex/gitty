@@ -259,7 +259,7 @@ export class HistoryViewProvider extends BaseViewProvider implements TextDocumen
 
             this.append(entry.hash, this.decorate.hash, false, {
                 onClick: () => {
-                    this.container.explorerView.setContext({
+                    this.container.explorerView.openResult({
                         repo: context.repo,
                         rightRef: entry.hash,
                         specifiedPath: context.specifiedPath,
@@ -275,7 +275,7 @@ export class HistoryViewProvider extends BaseViewProvider implements TextDocumen
                 this.append(iconmap[ref.type] + ref.name, this.decorate.ref, true, {
                     onClick: () => {
                         commands.executeCommand(EXTENSION_NAMESPACE + '.viewHistory', {...context, branch: ref.name});
-                        this.container.explorerView.setContext({repo: context.repo, rightRef: ref.name });
+                        this.container.explorerView.openResult({repo: context.repo, rightRef: ref.name });
                     }
                 });
             }

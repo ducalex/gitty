@@ -79,8 +79,13 @@
         "views": {
             "explorer": [
                 {
-                    "id": "explorerCommitViewer",
-                    "name": "Gitty",
+                    "id": "explorerResultsViewer",
+                    "name": "Gitty Results",
+                    "when": "gitty.projectHasGitRepo && gitty.hasResults"
+                },
+                {
+                    "id": "explorerFileHistoryViewer",
+                    "name": "File History",
                     "when": "gitty.projectHasGitRepo"
                 }
             ]
@@ -150,7 +155,7 @@
                 }
             },
             {
-                "command": "gitty.explorerRefresh",
+                "command": "gitty.explorerFileHistoryRefresh",
                 "title": "Refresh",
                 "icon": {
                     "light": "res/light/refresh.svg",
@@ -208,33 +213,33 @@
             "view/title": [
                 {
                     "command": "gitty.explorerShowTreeView",
-                    "when": "view == explorerCommitViewer && !config.gitty.explorer.treeView && gitty.isExploringCommit",
+                    "when": "view == explorerResultsViewer && !config.gitty.explorer.treeView",
                     "group": "navigation@1"
                 },
                 {
                     "command": "gitty.explorerShowListView",
-                    "when": "view == explorerCommitViewer && config.gitty.explorer.treeView && gitty.isExploringCommit",
+                    "when": "view == explorerResultsViewer && config.gitty.explorer.treeView",
                     "group": "navigation@1"
                 },
                 {
-                    "command": "gitty.explorerRefresh",
-                    "when": "view == explorerCommitViewer",
+                    "command": "gitty.explorerFileHistoryRefresh",
+                    "when": "view == explorerFileHistoryViewer",
                     "group": "navigation@3"
                 },
                 {
                     "command": "gitty.clear",
-                    "when": "view == explorerCommitViewer && gitty.isExploringCommit",
+                    "when": "view == explorerResultsViewer",
                     "group": "navigation@4"
                 }
             ],
             "view/item/context": [
                 {
                     "command": "gitty.viewFileHistory",
-                    "when": "view == explorerCommitViewer && viewItem != folder"
+                    "when": "view == explorerFileHistoryViewer && viewItem != folder"
                 },
                 {
                     "command": "gitty.viewFolderHistory",
-                    "when": "view == explorerCommitViewer && viewItem == folder"
+                    "when": "view == explorerFileHistoryViewer && viewItem == folder"
                 }
             ],
             "explorer/context": [
